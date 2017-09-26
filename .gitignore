@@ -1,3 +1,7 @@
 *.pyc
 .DS_Store
 data/
+*.tfrecords
+*.npy
+.ipynb_checkpoints/
+*.ipynb

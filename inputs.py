@@ -28,17 +28,17 @@ def _float_feature(ndarr):
 def _int_feature(value):
   return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
-def preprocess():
+def convert_npy_to_tfrecords():
   writer = tf.python_io.TFRecordWriter('train.tfrecords')
   i = 0
   for folder in os.listdir(_TRAIN_DATA_PATH):
     if folder == '.DS_Store':
       continue
 
-    rgb_files = ['data/v_CricketShot_g04_c01_flow.npy']
-    flow_files = ['data/v_CricketShot_g04_c01_flow.npy']
-    # rgb_files = os.listdir(_TRAIN_DATA_PATH + '/' + folder + '/rgb')
-    # flow_files = os.listdir(_TRAIN_DATA_PATH + '/' + folder + '/flow')
+    # rgb_files = ['data/v_CricketShot_g04_c01_rgb.npy']
+    # flow_files = ['data/v_CricketShot_g04_c01_flow.npy']
+    rgb_files = os.listdir(_TRAIN_DATA_PATH + '/' + folder + '/rgb')
+    flow_files = os.listdir(_TRAIN_DATA_PATH + '/' + folder + '/flow')
     num_files = len(rgb_files)
 
     for j in range(num_files):
@@ -53,7 +53,6 @@ def preprocess():
       example = tf.train.Example(features=tf.train.Features(feature=feature))
       writer.write(example.SerializeToString())
     i += 1
-    break
   writer.close()
 
 def inputs(batch_size):
@@ -68,23 +67,23 @@ def inputs(batch_size):
   _, data = reader.read(data_queue)
   features = tf.parse_single_example(data, features=feature)
   print features
-  rgb = tf.reshape(feature['rgb'], [_SAMPLE_VIDEO_FRAMES, _IMAGE_SIZE, _IMAGE_SIZE, 3])
-  flow = tf.reshape(feature['flow'], [_SAMPLE_VIDEO_FRAMES, _IMAGE_SIZE, _IMAGE_SIZE, 2])
-  label = tf.cast(feature['label'], tf.int32)
+  rgb = tf.reshape(features['rgb'], [_SAMPLE_VIDEO_FRAMES, _IMAGE_SIZE, _IMAGE_SIZE, 3])
+  flow = tf.reshape(features['flow'], [_SAMPLE_VIDEO_FRAMES, _IMAGE_SIZE, _IMAGE_SIZE, 2])
+  label = tf.cast(features['label'], tf.int32)
   
   rgbs, flows, labels = tf.train.shuffle_batch([rgb, flow, label], 
                                        batch_size=batch_size, 
                                        num_threads=4,
-                                       capacity=1000 + 3 * batch_size,
-                                       min_after_dequeue=1000)
+                                       capacity=3 + batch_size,
+                                       min_after_dequeue=1)
+  return rgbs, flows, labels
 
-if __name__ == '__main__':
-  preprocess()
-  r,f,l = inputs(1)
-  with tf.Session() as sess:
-    coord = tf.train.Coordinator()
-    threads = tf.trian.start_queue_runners(sess, coord)
-    img, flow, label = sess.run([r, f, l])
-    np.save(img, 'image.npy')
-    np.save(flow, 'flow.npy')
-    print label
+# if __name__ == '__main__':
+#   convert_npy_to_tfrecords()
+
+#   r,f,l = inputs(1)
+#   with tf.Session() as sess:
+#     coord = tf.train.Coordinator()
+#     threads = tf.train.start_queue_runners(sess, coord)
+#     img, flow, label = sess.run([r, f, l])
+#     print img
