@@ -5,7 +5,6 @@ import os
 import numpy as np
 import tensorflow as tf
 
-from inputs import inputs, preprocess, _IMAGE_SIZE, _SAMPLE_VIDEO_FRAMES
 import i3d
 
 _NUM_CLASSES = 101
@@ -21,22 +20,21 @@ _CHECKPOINT_PATHS = {
     'flow_imagenet': 'data/checkpoints/flow_imagenet/model.ckpt',
 }
 
-
-def train():
-  print _IMAGE_SIZE
-  # rgb_inputs, flow_inputs, labels = inputs(_BATCH_SIZE)
-  rgb_inputs = tf.placeholder(
-    tf.float32,
-    shape=(1, _SAMPLE_VIDEO_FRAMES, _IMAGE_SIZE, _IMAGE_SIZE, 3))
-  flow_inputs = tf.placeholder(
-    tf.float32,
-    shape=(1, _SAMPLE_VIDEO_FRAMES, _IMAGE_SIZE, _IMAGE_SIZE, 2))
-
+def inference(rgb_inputs, flow_inputs):
   with tf.variable_scope('RGB'):
     rgb_model = i3d.InceptionI3d(
       _NUM_CLASSES, spatial_squeeze=True, final_endpoint='Logits')
     rgb_logits, _ = rgb_model(
       rgb_inputs, is_training=True, dropout_keep_prob=_DROPOUT_KEEP_PROB)
+  with tf.variable_scope('Flow'):
+    flow_model = i3d.InceptionI3d(
+        _NUM_CLASSES, spatial_squeeze=True, final_endpoint='Logits')
+    flow_logits, _ = flow_model(
+        flow_inputs, is_training=True, dropout_keep_prob=_DROPOUT_KEEP_PROB)
+  return rgb_logits, flow_logits
+
+def restore():
+  # rgb
   rgb_variable_map = {}
   for variable in tf.global_variables():
     if variable.name.split('/')[0] == 'RGB':
@@ -44,12 +42,7 @@ def train():
         continue 
       rgb_variable_map[variable.name.replace(':0', '')] = variable
   rgb_saver = tf.train.Saver(var_list=rgb_variable_map, reshape=True)
-
-  with tf.variable_scope('Flow'):
-    flow_model = i3d.InceptionI3d(
-        _NUM_CLASSES, spatial_squeeze=True, final_endpoint='Logits')
-    flow_logits, _ = flow_model(
-        flow_inputs, is_training=True, dropout_keep_prob=_DROPOUT_KEEP_PROB)
+  # flow
   flow_variable_map = {}
   for variable in tf.global_variables():
     if variable.name.split('/')[0] == 'Flow':
@@ -57,28 +50,35 @@ def train():
         continue 
       flow_variable_map[variable.name.replace(':0', '')] = variable
   flow_saver = tf.train.Saver(var_list=flow_variable_map, reshape=True)
+  return rgb_saver, flow_saver
 
-  # model_logits = rgb_logits + flow_logits
-  # loss = tf.reduce_mean(
-  #   tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=model_logits))
-  # lr = 0.01
-  # opt = tf.train.GradientDescentOptimizer(lr)
-  # train_op = opt.minimize(loss)
 
+def loss(rgb_logits, flow_logits):
+  model_logits = rgb_logits + flow_logits
+  loss = tf.reduce_mean(
+          tf.nn.sparse_softmax_cross_entropy_with_logits(
+            labels=labels, logits=model_logits))
+  lr = 0.01
+  opt = tf.train.GradientDescentOptimizer(lr)
+  train_op = opt.minimize(loss)
+  return train_op
+
+
+def train():
   # saver for fine tuning
-  # saver = tf.train.Saver(max_to_keep=10)
-  # ckpt_path = './tmp/ckpt'
-  # if not os.path.exists(ckpt_path):
-  #   os.mkdir(ckpt_path)
+  saver = tf.train.Saver(max_to_keep=10)
+  ckpt_path = './tmp/ckpt'
+  if not os.path.exists(ckpt_path):
+    os.mkdir(ckpt_path)
   
-  # with tf.Session() as sess:
-  #   sess.run(tf.global_variables_initializer())
+  with tf.Session() as sess:
+    sess.run(tf.global_variables_initializer())
 
-  #   ckpt = tf.train.get_checkpoint_state(ckpt_path)
-  #   if ckpt and ckpt.model_checkpoint_path:
-  #     print 'Restoring from:', ckpt.model_checkpoint_path
-  #     saver.restore(sess, ckpt.all_model_checkpoint_paths[-1])
-  #   else:
+    ckpt = tf.train.get_checkpoint_state(ckpt_path)
+    if ckpt and ckpt.model_checkpoint_path:
+      print 'Restoring from:', ckpt.model_checkpoint_path
+      saver.restore(sess, ckpt.all_model_checkpoint_paths[-1])
+    else:
   #     print 'No checkpoint file found, restoring pretrained weights...'
   #     rgb_saver.restore(sess, _CHECKPOINT_PATHS['rgb_imagenet'])
   #     flow_saver.restore(sess, _CHECKPOINT_PATHS['flow_imagenet'])
@@ -97,5 +97,3 @@ def train():
   #       sess.run(train_op)
   #     i += 1
 
-if __name__ == '__main__':
-  train()
