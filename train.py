@@ -9,7 +9,7 @@ from inputs import inputs, preprocess, _IMAGE_SIZE, _SAMPLE_VIDEO_FRAMES
 import i3d
 
 _NUM_CLASSES = 101
-_BATCH_SIZE = 100
+_BATCH_SIZE = 10
 
 _DROPOUT_KEEP_PROB = 0.5
 _MAX_ITER = 100000
