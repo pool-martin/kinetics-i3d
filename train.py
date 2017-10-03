@@ -4,11 +4,13 @@ import os
 
 import numpy as np
 import tensorflow as tf
+from inputs_new import *
 
 import i3d
 
 _NUM_CLASSES = 101
 _BATCH_SIZE = 10
+_NUM_FRAMES = 64
 
 _DROPOUT_KEEP_PROB = 0.5
 _MAX_ITER = 100000
@@ -53,47 +55,64 @@ def restore():
   return rgb_saver, flow_saver
 
 
-def loss(rgb_logits, flow_logits):
-  model_logits = rgb_logits + flow_logits
-  loss = tf.reduce_mean(
+def loss(logits, labels):
+  return tf.reduce_mean(
           tf.nn.sparse_softmax_cross_entropy_with_logits(
-            labels=labels, logits=model_logits))
+            labels=labels, logits=logits))
+
+def train(loss):
   lr = 0.01
   opt = tf.train.GradientDescentOptimizer(lr)
   train_op = opt.minimize(loss)
   return train_op
 
-
-def train():
+def main():
   # saver for fine tuning
   saver = tf.train.Saver(max_to_keep=10)
   ckpt_path = './tmp/ckpt'
   if not os.path.exists(ckpt_path):
     os.mkdir(ckpt_path)
-  
+
+  # placeholders for input queue
+  rgb = tf.placeholder(tf.string, shape=[_NUM_FRAMES])
+  flow_x = tf.placeholder(tf.string, shape=[_NUM_FRAMES])
+  flow_y = tf.placeholder(tf.string, shape=[_NUM_FRAMES])
+  label = tf.placeholder(tf.int32)
+  # cls_dict maps class names to integer labels
+  cls_dict = build_cls_dict()
+
+  enqueue_op, rgbs, flows, labels = inputs(rgb, flow_x, flow_y, label, 10)
+  rgb_logits, flow_logits = inference(rgbs, flows)
+  total_loss = loss(rgb_logits + flow_logits, labels)
+  train_op = train(total_loss)
+
   with tf.Session() as sess:
-    sess.run(tf.global_variables_initializer())
+    # sess.run(tf.global_variables_initializer())
+
+    enqueue_thread = threading.Thread(target=enqueue, args=[sess, enqueue_op, _NUM_FRAMES, cls_dict])
+    enqueue_thread.isDaemon()
+    enqueue_thread.start()
 
     ckpt = tf.train.get_checkpoint_state(ckpt_path)
     if ckpt and ckpt.model_checkpoint_path:
       print 'Restoring from:', ckpt.model_checkpoint_path
       saver.restore(sess, ckpt.all_model_checkpoint_paths[-1])
     else:
-  #     print 'No checkpoint file found, restoring pretrained weights...'
-  #     rgb_saver.restore(sess, _CHECKPOINT_PATHS['rgb_imagenet'])
-  #     flow_saver.restore(sess, _CHECKPOINT_PATHS['flow_imagenet'])
+      print 'No checkpoint file found, restoring pretrained weights...'
+      rgb_saver.restore(sess, _CHECKPOINT_PATHS['rgb_imagenet'])
+      flow_saver.restore(sess, _CHECKPOINT_PATHS['flow_imagenet'])
 
-  #   # we're going to use queue in inputs(), so we need to start queue runners 
-  #   coord = tf.train.Coordinator()
-  #   threads = tf.train.start_queue_runners(sess, coord)
-  #   it = 0
-  #   while it < _MAX_ITER:
-  #     if i % 1000 == 0:
-  #       _, loss_val = sess.run([train_op, loss])
-  #       print 'step %d, loss = %.3f' % (i, loss_val)
-  #       if i > 0:
-  #         saver.save(sess, ckpt_path + '/model_ckpt', i)
-  #     else:
-  #       sess.run(train_op)
-  #     i += 1
+    # we're going to use queue in inputs(), so we need to start queue runners 
+    coord = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(sess, coord)
+    it = 0
+    while it < _MAX_ITER:
+      if i % 1000 == 0:
+        _, loss_val = sess.run([train_op, total_loss])
+        print 'step %d, loss = %.3f' % (i, loss_val)
+        if i > 0:
+          saver.save(sess, ckpt_path + '/model_ckpt', i)
+      else:
+        sess.run(train_op)
+      i += 1
 

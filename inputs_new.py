@@ -6,7 +6,6 @@ import threading
 
 FRAME_DATA_PATH = '/media/6TB/Videos/UCF-101-frames'
 CROP_SIZE = 224
-NUM_FRAMES = 64
 
 def enqueue(sess, enqueue_op, num_frames, cls_dict):
   folders = [folder for folder in os.listdir(FRAME_DATA_PATH) if folder.startswith('v')]
@@ -63,7 +62,8 @@ def inputs(rgb, flow_x, flow_y, label, batch_size):
   output_flow = tf.random_crop(output_flow, [CROP_SIZE, CROP_SIZE, int(num_frames), 2])
 
   label = tf.cast(item[3], tf.int32)
-  return enqueue_op, tf.train.batch([output_rgb, output_flow, label], batch_size=batch_size)
+  rgbs, flows, labels = tf.train.batch([output_rgb, output_flow, label], batch_size=batch_size)
+  return enqueue_op, rgbs, flows, labels
 
 
 def build_cls_dict():
@@ -77,29 +77,29 @@ def build_cls_dict():
       l += 1
   return cls_dict
 
-  
-if __name__ == '__main__':
-  with tf.Graph().as_default() as g:
-    # placeholders for input queue
-    rgb = tf.placeholder(tf.string, shape=[NUM_FRAMES])
-    flow_x = tf.placeholder(tf.string, shape=[NUM_FRAMES])
-    flow_y = tf.placeholder(tf.string, shape=[NUM_FRAMES])
-    label = tf.placeholder(tf.int32)
-    # cls_dict maps class names to integer labels
-    cls_dict = build_cls_dict()
 
-    enqueue_op, batch = inputs(rgb, flow_x, flow_y, label, 10)
-    with tf.Session() as sess:
-      enqueue_thread = threading.Thread(target=enqueue, args=[sess, enqueue_op, NUM_FRAMES, cls_dict])
-      enqueue_thread.isDaemon()
-      enqueue_thread.start()
+# if __name__ == '__main__':
+#   with tf.Graph().as_default() as g:
+#     # placeholders for input queue
+#     rgb = tf.placeholder(tf.string, shape=[NUM_FRAMES])
+#     flow_x = tf.placeholder(tf.string, shape=[NUM_FRAMES])
+#     flow_y = tf.placeholder(tf.string, shape=[NUM_FRAMES])
+#     label = tf.placeholder(tf.int32)
+#     # cls_dict maps class names to integer labels
+#     cls_dict = build_cls_dict()
+
+#     enqueue_op, batch = inputs(rgb, flow_x, flow_y, label, 10)
+#     with tf.Session() as sess:
+#       enqueue_thread = threading.Thread(target=enqueue, args=[sess, enqueue_op, NUM_FRAMES, cls_dict])
+#       enqueue_thread.isDaemon()
+#       enqueue_thread.start()
       
-      coord = tf.train.Coordinator()
-      threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+#       coord = tf.train.Coordinator()
+#       threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
-      print batch 
-      res = sess.run(batch[2])
-      print res
+#       print batch 
+#       res = sess.run(batch[2])
+#       print res
  
-      coord.request_stop()
-      coord.join(threads)
+#       coord.request_stop()
+#       coord.join(threads)
