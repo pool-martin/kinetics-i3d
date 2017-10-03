@@ -36,6 +36,7 @@ def enqueue(sess, enqueue_op, num_frames, cls_dict):
     imgs_out = imgs[begin:begin + num_frames]
     flow_xs_out = flow_xs[begin:begin + num_frames]
     flow_ys_out = flow_ys[begin:begin + num_frames]
+    # print imgs_out, flow_xs_out, flow_ys_out, cls_dict[cls_name]
     sess.run(enqueue_op, {rgb: imgs_out, flow_x: flow_xs_out, flow_y: flow_ys_out, label: cls_dict[cls_name]})
 
 
@@ -55,20 +56,19 @@ def inputs(rgb, flow_x, flow_y, label, batch_size):
   output_rgb = tf.stack(rgb_frames, axis=2)
   tmp_flow_x = tf.stack(flow_x_frames, axis=2)
   tmp_flow_y = tf.stack(flow_y_frames, axis=2)
-  output_flow = tf.stack([tmp_flow_x, tmp_flow_y], axis=3)
+  output_flow = tf.concat([tmp_flow_x, tmp_flow_y], axis=3)
 
   # random crop
   output_rgb = tf.random_crop(output_rgb, [CROP_SIZE, CROP_SIZE, int(num_frames), 3])
   output_flow = tf.random_crop(output_flow, [CROP_SIZE, CROP_SIZE, int(num_frames), 2])
 
   label = tf.cast(item[3], tf.int32)
-  
   return enqueue_op, tf.train.batch([output_rgb, output_flow, label], batch_size=batch_size)
 
 
 def build_cls_dict():
   cls_dict = {}
-  folders = np.sort([f for f in os.listdir(FRAME_DATA_PATH) if v.startswith('v')])
+  folders = np.sort([f for f in os.listdir(FRAME_DATA_PATH) if f.startswith('v')])
   l = 0
   for folder in folders:
     cls_name = folder.split('_')[1]
@@ -77,7 +77,8 @@ def build_cls_dict():
       l += 1
   return cls_dict
 
-def main():
+  
+if __name__ == '__main__':
   with tf.Graph().as_default() as g:
     # placeholders for input queue
     rgb = tf.placeholder(tf.string, shape=[NUM_FRAMES])
@@ -95,10 +96,10 @@ def main():
       
       coord = tf.train.Coordinator()
       threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-      
-      res = sess.run(batch)
-      print res.shape
-      
-      coord.request_stop()
-    coord.join(threads)
 
+      print batch 
+      res = sess.run(batch[2])
+      print res
+ 
+      coord.request_stop()
+      coord.join(threads)
