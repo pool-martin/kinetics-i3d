@@ -81,8 +81,9 @@ def main():
   # cls_dict maps class names to integer labels
   cls_dict = build_cls_dict()
 
-  enqueue_op, rgbs, flows, labels = inputs(rgb, flow_x, flow_y, label, 10)
+  enqueue_op, rgbs, flows, labels = inputs(rgb, flow_x, flow_y, label, _BATCH_SIZE)
   rgb_logits, flow_logits = inference(rgbs, flows)
+  rgb_saver, flow_saver = restore()
   total_loss = loss(rgb_logits + flow_logits, labels)
   train_op = train(total_loss)
 
@@ -106,7 +107,7 @@ def main():
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess, coord)
     it = 0
-    while it < _MAX_ITER:
+    while it < _MAX_ITER and not coord.should_stop():
       if i % 1000 == 0:
         _, loss_val = sess.run([train_op, total_loss])
         print 'step %d, loss = %.3f' % (i, loss_val)
@@ -115,4 +116,10 @@ def main():
       else:
         sess.run(train_op)
       i += 1
+    coord.request_stop()
+    coord.join(threads)
+
+if __name__ == '__main__':
+  main()
+
 
