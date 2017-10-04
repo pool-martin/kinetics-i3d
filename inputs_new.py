@@ -52,14 +52,22 @@ def inputs(rgb, flow_x, flow_y, label, batch_size):
     flow_x_frames.append(tf.image.decode_jpeg(tf.read_file(item[1][i]), channels=1))
     flow_y_frames.append(tf.image.decode_jpeg(tf.read_file(item[2][i]), channels=1))
   
-  output_rgb = tf.stack(rgb_frames, axis=2)
-  tmp_flow_x = tf.stack(flow_x_frames, axis=2)
-  tmp_flow_y = tf.stack(flow_y_frames, axis=2)
+  output_rgb = tf.stack(rgb_frames, axis=0)
+  tmp_flow_x = tf.stack(flow_x_frames, axis=0)
+  tmp_flow_y = tf.stack(flow_y_frames, axis=0)
   output_flow = tf.concat([tmp_flow_x, tmp_flow_y], axis=3)
 
   # random crop
-  output_rgb = tf.random_crop(output_rgb, [CROP_SIZE, CROP_SIZE, int(num_frames), 3])
-  output_flow = tf.random_crop(output_flow, [CROP_SIZE, CROP_SIZE, int(num_frames), 2])
+  rgb_flow_concat = tf.concat([output_rgb, output_flow], axis=3)
+  crop_concat = tf.random_crop(rgb_flow_concat, [int(num_frames), CROP_SIZE, CROP_SIZE, 5])
+  output_rgb = crop_concat[:,:,:,:3]
+  output_flow = crop_concat[:,:,:,3:]
+ 
+  # rescale
+  output_rgb = tf.cast(output_rgb, tf.float32)
+  output_flow = tf.cast(output_flow, tf.float32)
+  output_rgb = output_rgb * 2 / 255.0 - 1
+  output_flow = output_flow * 2 / 255.0 - 1
 
   label = tf.cast(item[3], tf.int32)
   rgbs, flows, labels = tf.train.batch([output_rgb, output_flow, label], batch_size=batch_size)
