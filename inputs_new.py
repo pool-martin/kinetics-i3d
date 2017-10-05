@@ -104,7 +104,7 @@ class InputPipeLine(object):
 
 if __name__ == '__main__':
   with tf.Graph().as_default() as g:
-    pipeline = InputPipeLine(20, 10) # (NUM_FRAMES, BATCH_SIZE)
+    pipeline = InputPipeLine(20, 10, 1) # (NUM_FRAMES, BATCH_SIZE, FRAME_STRIDE)
     rgbs, flows, labels = pipeline.get_batch()
 
     with tf.Session() as sess:

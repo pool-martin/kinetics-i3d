@@ -11,6 +11,7 @@ import i3d
 _NUM_CLASSES = 101
 _BATCH_SIZE = 1
 _NUM_FRAMES = 64
+_FRAME_STRIDE = 1
 
 _DROPOUT_KEEP_PROB = 0.5
 _MAX_ITER = 100000
@@ -69,7 +70,7 @@ def train(loss):
   return train_op
 
 if __name__ == '__main__':
-  pipeline = InputPipeLine(_NUM_FRAMES, _BATCH_SIZE)
+  pipeline = InputPipeLine(_NUM_FRAMES, _BATCH_SIZE, _FRAME_STRIDE)
 
   rgbs, flows, labels = pipeline.get_batch()
   rgb_logits, flow_logits = inference(rgbs, flows)
