@@ -64,6 +64,10 @@ class InputPipeLine(object):
     enqueue_thread = threading.Thread(target=self._enqueue, args=[sess, enqueue_op])
     enqueue_thread.daemon = True
     enqueue_thread.start()
+    # start pipeline before start tf queue runners
+    coord = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+    return threads
 
   def get_batch(self):
     item = self.queue.dequeue()
@@ -99,16 +103,12 @@ class InputPipeLine(object):
 
 if __name__ == '__main__':
   with tf.Graph().as_default() as g:
-    pipeline = InputPipeLine(20, 10)
+    pipeline = InputPipeLine(20, 10) # (NUM_FRAMES, BATCH_SIZE)
     rgbs, flows, labels = pipeline.get_batch()
 
     with tf.Session() as sess:
-      # start pipeline before start tf queue runners
-      pipeline.start(sess)
-      
-      coord = tf.train.Coordinator()
-      threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-
+      pipeline.start(sess) # start input pipeline with sess
+    
       rgbs_res, flows_res = sess.run([rgbs, flows])
       print 'RGB', rgbs_res[0].min(), rgbs_res[0].max() 
       print 'flow', flows_res[0].min(), flows_res[0].max()

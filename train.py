@@ -69,13 +69,7 @@ def train(loss):
   return train_op
 
 def main():
-  # placeholders for input queue
-  rgb = tf.placeholder(tf.string, shape=[_NUM_FRAMES])
-  flow_x = tf.placeholder(tf.string, shape=[_NUM_FRAMES])
-  flow_y = tf.placeholder(tf.string, shape=[_NUM_FRAMES])
-  label = tf.placeholder(tf.int32)
-  # cls_dict maps class names to integer labels
-  cls_dict = build_cls_dict()
+  pipeline = InputPipeLine(_NUM_FRAMES, _BATCH_SIZE)
 
   enqueue_op, rgbs, flows, labels = inputs(rgb, flow_x, flow_y, label, _BATCH_SIZE)
   rgb_logits, flow_logits = inference(rgbs, flows)
@@ -94,10 +88,6 @@ def main():
   with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
 
-    enqueue_thread = threading.Thread(target=enqueue, args=[sess, enqueue_op, rgb, flow_x, flow_y, label, _NUM_FRAMES, cls_dict])
-    enqueue_thread.daemon = True
-    enqueue_thread.start()
-
     ckpt = tf.train.get_checkpoint_state(ckpt_path)
     if ckpt and ckpt.model_checkpoint_path:
       print 'Restoring from:', ckpt.model_checkpoint_path
@@ -106,18 +96,17 @@ def main():
       print 'No checkpoint file found, restoring pretrained weights...'
       rgb_saver.restore(sess, _CHECKPOINT_PATHS['rgb_imagenet'])
       flow_saver.restore(sess, _CHECKPOINT_PATHS['flow_imagenet'])
-      print 'Load Complete'
+      print 'Restore Complete.'
 
-    # we're going to use queue in inputs(), so we need to start queue runners 
-    coord = tf.train.Coordinator()
-    threads = tf.train.start_queue_runners(sess, coord)
+    pipeline.start(sess)
+
     it = 0
     while it < _MAX_ITER and not coord.should_stop():
-      if it % 1 == 0:
+      if it % 100 == 0:
         _, loss_val = sess.run([train_op, total_loss])
         print 'step %d, loss = %.3f' % (it, loss_val)
-        # if it > 0:
-        #  saver.save(sess, ckpt_path + '/model_ckpt', it)
+        if it > 0:
+         saver.save(sess, ckpt_path + '/model_ckpt', it)
       else:
         sess.run(train_op)
       it += 1
