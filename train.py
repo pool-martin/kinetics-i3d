@@ -22,6 +22,7 @@ _CHECKPOINT_PATHS = {
     'flow_imagenet': 'data/checkpoints/flow_imagenet/model.ckpt',
 }
 
+# build the model
 def inference(rgb_inputs, flow_inputs):
   with tf.variable_scope('RGB'):
     rgb_model = i3d.InceptionI3d(
@@ -35,6 +36,7 @@ def inference(rgb_inputs, flow_inputs):
         flow_inputs, is_training=True, dropout_keep_prob=_DROPOUT_KEEP_PROB)
   return rgb_logits, flow_logits
 
+# restore the pretrained weights 
 def restore():
   # rgb
   rgb_variable_map = {}
@@ -61,7 +63,7 @@ def loss(logits, labels):
             labels=labels, logits=logits))
 
 def train(loss):
-  lr = 0.01
+  lr = 0.01 # can change it to exponentially decay with global steps 
   opt = tf.train.GradientDescentOptimizer(lr)
   train_op = opt.minimize(loss)
   return train_op
@@ -93,7 +95,7 @@ def main():
     sess.run(tf.global_variables_initializer())
 
     enqueue_thread = threading.Thread(target=enqueue, args=[sess, enqueue_op, rgb, flow_x, flow_y, label, _NUM_FRAMES, cls_dict])
-    enqueue_thread.isDaemon()
+    enqueue_thread.daemon = True
     enqueue_thread.start()
 
     ckpt = tf.train.get_checkpoint_state(ckpt_path)
