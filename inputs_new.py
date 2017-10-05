@@ -9,9 +9,10 @@ CROP_SIZE = 224
 
 
 class InputPipeLine(object):
-  def __init__(self, NUM_FRAMES, BATCH_SIZE):
-    self.num_frames = NUM_FRAMES
-    self.batch_size = BATCH_SIZE
+  def __init__(self, num_frames, batch_size, frame_stride):
+    self.num_frames = num_frames
+    self.batch_size = batch_size
+    self.stride = frame_stride
     self.cls_dict = {}
     folders = np.sort([f for f in os.listdir(FRAME_DATA_PATH) if f.startswith('v')])
     l = 0
@@ -46,8 +47,8 @@ class InputPipeLine(object):
       else:
         begin = 0
         ori_len = len(imgs)
-        while self.num_frames > len(imgs):
-          for i in range(ori_len):
+        while len(imgs) < self.num_frames:
+          for i in range(0, ori_len, self.stride):
             imgs.append(imgs[i])
             flow_xs.append(flow_xs[i])
             flow_ys.append(flow_ys[i])
@@ -94,7 +95,7 @@ class InputPipeLine(object):
     output_rgb = tf.cast(output_rgb, tf.float32)
     output_flow = tf.cast(output_flow, tf.float32)
     output_rgb = output_rgb * 2 / 255.0 - 1
-    output_flow = output_flow * 2 / 255.0 - 1
+    output_flow = output_flow * 2 / 256.0 - 1
 
     label = tf.cast(item[3], tf.int32)
     rgbs, flows, labels = tf.train.batch([output_rgb, output_flow, label], batch_size=self.batch_size)
