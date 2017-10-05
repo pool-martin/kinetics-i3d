@@ -17,7 +17,7 @@ class InputPipeLine(object):
     l = 0
     for folder in folders:
       cls_name = folder.split('_')[1]
-      if not cls_name in cls_dict:
+      if not cls_name in self.cls_dict:
         self.cls_dict[cls_name] = l
         l += 1
     # placeholders
@@ -41,23 +41,23 @@ class InputPipeLine(object):
       flow_ys = [os.path.join(prefix, flow) for flow in sorted_list if flow.startswith('flow_y')]
       assert len(imgs) == len(flow_xs)
       assert len(imgs) == len(flow_ys)
-      if num_frames <= len(imgs):
-        begin = np.random.randint(0, len(imgs) - num_frames + 1)
+      if self.num_frames <= len(imgs):
+        begin = np.random.randint(0, len(imgs) - self.num_frames + 1)
       else:
         begin = 0
         ori_len = len(imgs)
-        while num_frames > len(imgs):
+        while self.num_frames > len(imgs):
           for i in range(ori_len):
             imgs.append(imgs[i])
             flow_xs.append(flow_xs[i])
             flow_ys.append(flow_ys[i])
-            if len(imgs) == num_frames:
+            if len(imgs) == self.num_frames:
               break
 
-      imgs_out = imgs[begin:begin + num_frames]
-      flow_xs_out = flow_xs[begin:begin + num_frames]
-      flow_ys_out = flow_ys[begin:begin + num_frames]
-      sess.run(enqueue_op, {self.rgb: imgs_out, self.flow_x: flow_xs_out, self.flow_y: flow_ys_out, self.label: cls_dict[cls_name]})
+      imgs_out = imgs[begin:begin + self.num_frames]
+      flow_xs_out = flow_xs[begin:begin + self.num_frames]
+      flow_ys_out = flow_ys[begin:begin + self.num_frames]
+      sess.run(enqueue_op, {self.rgb: imgs_out, self.flow_x: flow_xs_out, self.flow_y: flow_ys_out, self.label: self.cls_dict[cls_name]})
 
   def start(self, sess):
     enqueue_op = self.queue.enqueue([self.rgb, self.flow_x, self.flow_y, self.label])
@@ -67,14 +67,14 @@ class InputPipeLine(object):
     # start pipeline before start tf queue runners
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    return threads
+    return coord, threads
 
   def get_batch(self):
     item = self.queue.dequeue()
     rgb_frames = []
     flow_x_frames = []
     flow_y_frames = []
-    for i in range(num_frames):
+    for i in range(self.num_frames):
       rgb_frames.append(tf.image.decode_jpeg(tf.read_file(item[0][i]), channels=3))
       flow_x_frames.append(tf.image.decode_jpeg(tf.read_file(item[1][i]), channels=1))
       flow_y_frames.append(tf.image.decode_jpeg(tf.read_file(item[2][i]), channels=1))
@@ -86,7 +86,7 @@ class InputPipeLine(object):
 
     # random crop
     rgb_flow_concat = tf.concat([output_rgb, output_flow], axis=3)
-    crop_concat = tf.random_crop(rgb_flow_concat, [int(num_frames), CROP_SIZE, CROP_SIZE, 5])
+    crop_concat = tf.random_crop(rgb_flow_concat, [int(self.num_frames), CROP_SIZE, CROP_SIZE, 5])
     output_rgb = crop_concat[:,:,:,:3]
     output_flow = crop_concat[:,:,:,3:]
    
@@ -97,7 +97,7 @@ class InputPipeLine(object):
     output_flow = output_flow * 2 / 255.0 - 1
 
     label = tf.cast(item[3], tf.int32)
-    rgbs, flows, labels = tf.train.batch([output_rgb, output_flow, label], batch_size=batch_size)
+    rgbs, flows, labels = tf.train.batch([output_rgb, output_flow, label], batch_size=self.batch_size)
     return rgbs, flows, labels
 
 
@@ -107,11 +107,11 @@ if __name__ == '__main__':
     rgbs, flows, labels = pipeline.get_batch()
 
     with tf.Session() as sess:
-      pipeline.start(sess) # start input pipeline with sess
+      coord, threads = pipeline.start(sess) # start input pipeline with sess
     
       rgbs_res, flows_res = sess.run([rgbs, flows])
-      print 'RGB', rgbs_res[0].min(), rgbs_res[0].max() 
-      print 'flow', flows_res[0].min(), flows_res[0].max()
- 
+      # print 'RGB', rgbs_res[0].min(), rgbs_res[0].max() 
+      # print 'flow', flows_res[0].min(), flows_res[0].max()
+      print rgbs_res.shape, flows_res.shape
       coord.request_stop()
       coord.join(threads)

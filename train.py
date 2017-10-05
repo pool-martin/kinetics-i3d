@@ -36,7 +36,7 @@ def inference(rgb_inputs, flow_inputs):
         flow_inputs, is_training=True, dropout_keep_prob=_DROPOUT_KEEP_PROB)
   return rgb_logits, flow_logits
 
-# restore the pretrained weights 
+# restore the pretrained weights, except for the last layer 
 def restore():
   # rgb
   rgb_variable_map = {}
@@ -68,10 +68,10 @@ def train(loss):
   train_op = opt.minimize(loss)
   return train_op
 
-def main():
+if __name__ == '__main__':
   pipeline = InputPipeLine(_NUM_FRAMES, _BATCH_SIZE)
 
-  enqueue_op, rgbs, flows, labels = inputs(rgb, flow_x, flow_y, label, _BATCH_SIZE)
+  rgbs, flows, labels = pipeline.get_batch()
   rgb_logits, flow_logits = inference(rgbs, flows)
   rgb_saver, flow_saver = restore()
   total_loss = loss(rgb_logits + flow_logits, labels)
@@ -98,22 +98,20 @@ def main():
       flow_saver.restore(sess, _CHECKPOINT_PATHS['flow_imagenet'])
       print 'Restore Complete.'
 
-    pipeline.start(sess)
+    coord, threads = pipeline.start(sess)
 
     it = 0
     while it < _MAX_ITER and not coord.should_stop():
-      if it % 100 == 0:
+      if it % 1 == 0:
         _, loss_val = sess.run([train_op, total_loss])
         print 'step %d, loss = %.3f' % (it, loss_val)
-        if it > 0:
-         saver.save(sess, ckpt_path + '/model_ckpt', it)
+        # if it > 0:
+        # saver.save(sess, ckpt_path + '/model_ckpt', it)
       else:
         sess.run(train_op)
       it += 1
     coord.request_stop()
     coord.join(threads)
 
-if __name__ == '__main__':
-  main()
 
 
