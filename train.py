@@ -7,44 +7,30 @@ import tensorflow as tf
 from inputs_new import *
 
 import i3d
-
-_NUM_CLASSES = 101
-_BATCH_SIZE = 1
-_NUM_FRAMES = 64
-_FRAME_STRIDE = 1
-
-_DROPOUT_KEEP_PROB = 0.5
-_MAX_ITER = 100000
-
-_CHECKPOINT_PATHS = {
-    'rgb': 'data/checkpoints/rgb_scratch/model.ckpt',
-    'flow': 'data/checkpoints/flow_scratch/model.ckpt',
-    'rgb_imagenet': 'data/checkpoints/rgb_imagenet/model.ckpt',
-    'flow_imagenet': 'data/checkpoints/flow_imagenet/model.ckpt',
-}
+from config import *
 
 # build the model
 def inference(rgb_inputs, flow_inputs):
   with tf.variable_scope('RGB'):
     rgb_model = i3d.InceptionI3d(
-      _NUM_CLASSES, spatial_squeeze=True, final_endpoint='Logits')
+      NUM_CLASSES, spatial_squeeze=True, final_endpoint='Logits')
     rgb_logits, _ = rgb_model(
-      rgb_inputs, is_training=True, dropout_keep_prob=_DROPOUT_KEEP_PROB)
+      rgb_inputs, is_training=True, dropout_keep_prob=DROPOUT_KEEP_PROB)
   with tf.variable_scope('Flow'):
     flow_model = i3d.InceptionI3d(
-        _NUM_CLASSES, spatial_squeeze=True, final_endpoint='Logits')
+        NUM_CLASSES, spatial_squeeze=True, final_endpoint='Logits')
     flow_logits, _ = flow_model(
-        flow_inputs, is_training=True, dropout_keep_prob=_DROPOUT_KEEP_PROB)
+        flow_inputs, is_training=True, dropout_keep_prob=DROPOUT_KEEP_PROB)
   return rgb_logits, flow_logits
 
-# restore the pretrained weights, except for the last layer 
+# restore the pretrained weights, except for the last layer
 def restore():
   # rgb
   rgb_variable_map = {}
   for variable in tf.global_variables():
     if variable.name.split('/')[0] == 'RGB':
       if 'Logits' in variable.name: # skip the last layer
-        continue 
+        continue
       rgb_variable_map[variable.name.replace(':0', '')] = variable
   rgb_saver = tf.train.Saver(var_list=rgb_variable_map, reshape=True)
   # flow
@@ -52,7 +38,7 @@ def restore():
   for variable in tf.global_variables():
     if variable.name.split('/')[0] == 'Flow':
       if 'Logits' in variable.name: # skip the last layer
-        continue 
+        continue
       flow_variable_map[variable.name.replace(':0', '')] = variable
   flow_saver = tf.train.Saver(var_list=flow_variable_map, reshape=True)
   return rgb_saver, flow_saver
@@ -64,13 +50,13 @@ def loss(logits, labels):
             labels=labels, logits=logits))
 
 def train(loss):
-  lr = 0.01 # can change it to exponentially decay with global steps 
+  lr = LR
   opt = tf.train.GradientDescentOptimizer(lr)
   train_op = opt.minimize(loss)
   return train_op
 
 if __name__ == '__main__':
-  pipeline = InputPipeLine(_NUM_FRAMES, _BATCH_SIZE, _FRAME_STRIDE)
+  pipeline = InputPipeLine(NUM_FRAMES, BATCH_SIZE, FRAME_STRIDE)
 
   rgbs, flows, labels = pipeline.get_batch()
   rgb_logits, flow_logits = inference(rgbs, flows)
@@ -79,10 +65,10 @@ if __name__ == '__main__':
   train_op = train(total_loss)
 
   # saver for fine tuning
-  if not os.path.exists('./tmp'):
-    os.mkdir('./tmp')
-  saver = tf.train.Saver(max_to_keep=10)
-  ckpt_path = './tmp/ckpt'
+  if not os.path.exists(TMPDIR):
+    os.mkdir(TMPDIR)
+  saver = tf.train.Saver(max_to_keep=SAVER_MAX_TO_KEEP)
+  ckpt_path = os.path.join(TMPDIR, 'ckpt')
   if not os.path.exists(ckpt_path):
     os.mkdir(ckpt_path)
 
@@ -95,15 +81,15 @@ if __name__ == '__main__':
       saver.restore(sess, ckpt.all_model_checkpoint_paths[-1])
     else:
       print 'No checkpoint file found, restoring pretrained weights...'
-      rgb_saver.restore(sess, _CHECKPOINT_PATHS['rgb_imagenet'])
-      flow_saver.restore(sess, _CHECKPOINT_PATHS['flow_imagenet'])
+      rgb_saver.restore(sess, CHECKPOINT_PATHS['rgb_imagenet'])
+      flow_saver.restore(sess, CHECKPOINT_PATHS['flow_imagenet'])
       print 'Restore Complete.'
 
     coord, threads = pipeline.start(sess)
 
     it = 0
-    while it < _MAX_ITER and not coord.should_stop():
-      if it % 1 == 0:
+    while it < MAX_ITER and not coord.should_stop():
+      if it % DISPLAY_ITER == 0:
         _, loss_val = sess.run([train_op, total_loss])
         print 'step %d, loss = %.3f' % (it, loss_val)
         # if it > 0:
@@ -113,6 +99,3 @@ if __name__ == '__main__':
       it += 1
     coord.request_stop()
     coord.join(threads)
-
-
-

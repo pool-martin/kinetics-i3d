@@ -2,11 +2,8 @@ import tensorflow as tf
 import numpy as np
 import os
 import threading
+from config import *
 # import train code here
-
-FRAME_DATA_PATH = '/media/6TB/Videos/UCF-101-frames'
-CROP_SIZE = 224
-
 
 class InputPipeLine(object):
   def __init__(self, num_frames, batch_size, frame_stride):
@@ -27,7 +24,7 @@ class InputPipeLine(object):
     self.flow_y = tf.placeholder(tf.string, shape=[self.num_frames])
     self.label = tf.placeholder(tf.int32)
 
-    self.queue = tf.FIFOQueue(capacity=32, dtypes=[tf.string, tf.string, tf.string, tf.int32], shapes=[[self.num_frames],[self.num_frames],[self.num_frames],[]])
+    self.queue = tf.FIFOQueue(capacity=QUEUE_CAPACITY, dtypes=[tf.string, tf.string, tf.string, tf.int32], shapes=[[self.num_frames],[self.num_frames],[self.num_frames],[]])
 
 
   def _enqueue(self, sess, enqueue_op):
@@ -79,7 +76,7 @@ class InputPipeLine(object):
       rgb_frames.append(tf.image.decode_jpeg(tf.read_file(item[0][i]), channels=3))
       flow_x_frames.append(tf.image.decode_jpeg(tf.read_file(item[1][i]), channels=1))
       flow_y_frames.append(tf.image.decode_jpeg(tf.read_file(item[2][i]), channels=1))
-    
+
     output_rgb = tf.stack(rgb_frames, axis=0)
     tmp_flow_x = tf.stack(flow_x_frames, axis=0)
     tmp_flow_y = tf.stack(flow_y_frames, axis=0)
@@ -90,7 +87,7 @@ class InputPipeLine(object):
     crop_concat = tf.random_crop(rgb_flow_concat, [int(self.num_frames), CROP_SIZE, CROP_SIZE, 5])
     output_rgb = crop_concat[:,:,:,:3]
     output_flow = crop_concat[:,:,:,3:]
-   
+
     # rescale
     output_rgb = tf.cast(output_rgb, tf.float32)
     output_flow = tf.cast(output_flow, tf.float32)
@@ -101,7 +98,6 @@ class InputPipeLine(object):
     rgbs, flows, labels = tf.train.batch([output_rgb, output_flow, label], batch_size=self.batch_size)
     return rgbs, flows, labels
 
-
 if __name__ == '__main__':
   with tf.Graph().as_default() as g:
     pipeline = InputPipeLine(20, 10, 1) # (NUM_FRAMES, BATCH_SIZE, FRAME_STRIDE)
@@ -109,7 +105,7 @@ if __name__ == '__main__':
 
     with tf.Session() as sess:
       coord, threads = pipeline.start(sess) # start input pipeline with sess
-    
+
       rgbs_res, flows_res = sess.run([rgbs, flows])
       # print 'RGB', rgbs_res[0].min(), rgbs_res[0].max() 
       # print 'flow', flows_res[0].min(), flows_res[0].max()
