@@ -6,12 +6,19 @@ from config import *
 # import train code here
 
 class InputPipeLine(object):
-  def __init__(self, num_frames, batch_size, frame_stride):
-    self.num_frames = num_frames
-    self.batch_size = batch_size
-    self.stride = frame_stride
+  def __init__(self, input_file_name, num_epochs=None):
+    self.num_frames = NUM_FRAMES
+    self.batch_size = BATCH_SIZE
+    self.stride = FRAME_STRIDE
+    self.num_epochs = num_epochs
     self.cls_dict = {}
-    folders = np.sort([f for f in os.listdir(FRAME_DATA_PATH) if f.startswith('v')])
+
+    folders = []
+    with open(input_file_name, 'r') as f:
+      for path in f.readlines():
+        folders.append(path)
+    # folders = np.sort([f for f in os.listdir(FRAME_DATA_PATH) if f.startswith('v')])
+    self.num_inputs = len(folders)
     l = 0
     for folder in folders:
       cls_name = folder.split('_')[1]
@@ -29,33 +36,41 @@ class InputPipeLine(object):
 
   def _enqueue(self, sess, enqueue_op):
     folders = [folder for folder in os.listdir(FRAME_DATA_PATH) if folder.startswith('v')]
+    epoch = 0
     while True:
-      index = np.random.randint(0, len(folders))
-      prefix = os.path.join(FRAME_DATA_PATH, folders[index])
-      cls_name = folders[index].split('_')[1]
-      sorted_list = np.sort(os.listdir(prefix))
-      imgs = [os.path.join(prefix, img) for img in sorted_list if img.startswith('img')]
-      flow_xs = [os.path.join(prefix, flow) for flow in sorted_list if flow.startswith('flow_x')]
-      flow_ys = [os.path.join(prefix, flow) for flow in sorted_list if flow.startswith('flow_y')]
-      assert len(imgs) == len(flow_xs)
-      assert len(imgs) == len(flow_ys)
-      if self.num_frames <= len(imgs):
-        begin = np.random.randint(0, len(imgs) - self.num_frames + 1)
-      else:
-        begin = 0
-        ori_len = len(imgs)
-        while len(imgs) < self.num_frames:
-          for i in range(0, ori_len, self.stride):
-            imgs.append(imgs[i])
-            flow_xs.append(flow_xs[i])
-            flow_ys.append(flow_ys[i])
-            if len(imgs) == self.num_frames:
-              break
+      np.random.shuffle(folders) # random shuffle every epoch
+      for video in folders:
+        prefix = os.path.join(FRAME_DATA_PATH, video)
+        cls_name = video.split('_')[1]
+        sorted_list = np.sort(os.listdir(prefix))
+        imgs = [os.path.join(prefix, img) for img in sorted_list if img.startswith('img')]
+        flow_xs = [os.path.join(prefix, flow) for flow in sorted_list if flow.startswith('flow_x')]
+        flow_ys = [os.path.join(prefix, flow) for flow in sorted_list if flow.startswith('flow_y')]
+        assert len(imgs) == len(flow_xs)
+        assert len(imgs) == len(flow_ys)
+        if self.num_frames <= len(imgs):
+          begin = np.random.randint(0, len(imgs) - self.num_frames + 1)
+        else:
+          begin = 0
+          ori_len = len(imgs)
+          while len(imgs) < self.num_frames:
+            for i in range(0, ori_len, self.stride):
+              imgs.append(imgs[i])
+              flow_xs.append(flow_xs[i])
+              flow_ys.append(flow_ys[i])
+              if len(imgs) == self.num_frames:
+                break
 
-      imgs_out = imgs[begin:begin + self.num_frames]
-      flow_xs_out = flow_xs[begin:begin + self.num_frames]
-      flow_ys_out = flow_ys[begin:begin + self.num_frames]
-      sess.run(enqueue_op, {self.rgb: imgs_out, self.flow_x: flow_xs_out, self.flow_y: flow_ys_out, self.label: self.cls_dict[cls_name]})
+        imgs_out = imgs[begin:begin + self.num_frames]
+        flow_xs_out = flow_xs[begin:begin + self.num_frames]
+        flow_ys_out = flow_ys[begin:begin + self.num_frames]
+        sess.run(enqueue_op, {self.rgb: imgs_out, self.flow_x: flow_xs_out, self.flow_y: flow_ys_out, self.label: self.cls_dict[cls_name]})
+      if self.num_epochs is not None:
+        epoch += 1
+        if epoch == self.num_epochs:
+          break
+    self.queue.close()
+
 
   def start(self, sess):
     enqueue_op = self.queue.enqueue([self.rgb, self.flow_x, self.flow_y, self.label])
@@ -67,8 +82,12 @@ class InputPipeLine(object):
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     return coord, threads
 
-  def get_batch(self):
-    item = self.queue.dequeue()
+  def get_batch(self, train=True):
+    try:
+      item = self.queue.dequeue()
+    except tf.errors.OutOfRangeError as e:
+      raise e
+
     rgb_frames = []
     flow_x_frames = []
     flow_y_frames = []
@@ -82,13 +101,20 @@ class InputPipeLine(object):
     tmp_flow_y = tf.stack(flow_y_frames, axis=0)
     output_flow = tf.concat([tmp_flow_x, tmp_flow_y], axis=3)
 
-    # random flip left-right
+
     rgb_flow_concat = tf.concat([output_rgb, output_flow], axis=3)
-    rand_num = tf.random_uniform([])
-    flip_concat = tf.cond(tf.less(rand_num, 0.5), lambda: tf.reverse(rgb_flow_concat, axis=2), lambda: rgb_flow_concat)
-    
-    # random crop
-    crop_concat = tf.random_crop(flip_concat, [int(self.num_frames), CROP_SIZE, CROP_SIZE, 5])
+    if train:
+      # random flip left-right
+      rand_num = tf.random_uniform([])
+      flip_concat = tf.cond(tf.less(rand_num, 0.5), lambda: tf.reverse(rgb_flow_concat, axis=2), lambda: rgb_flow_concat)
+      # random crop
+      crop_concat = tf.random_crop(flip_concat, [int(self.num_frames), CROP_SIZE, CROP_SIZE, 5])
+    else:
+      # center crop
+      beginH = (rgb_flow_concat.get_shape()[1] - 224) / 2
+      beginW = (rgb_flow_concat.get_shape()[2] - 224) / 2
+      crop_concat = rgb_flow_concat[:,beginH:beginH+224, beginW:beginW+224, :]
+
     output_rgb = crop_concat[:,:,:,:3]
     output_flow = crop_concat[:,:,:,3:]
 
@@ -101,6 +127,7 @@ class InputPipeLine(object):
     label = tf.cast(item[3], tf.int32)
     rgbs, flows, labels = tf.train.batch([output_rgb, output_flow, label], batch_size=self.batch_size)
     return rgbs, flows, labels
+
 
 if __name__ == '__main__':
   with tf.Graph().as_default() as g:

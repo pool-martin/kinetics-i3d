@@ -45,11 +45,11 @@ def restore():
 
 
 def tower_loss(scope, rgb_inputs, flow_inputs, labels):
-  logits = inference(rgb_inputs, flow_inputs)
-
+  rgb_logits, flow_logits = inference(rgb_inputs, flow_inputs)
+  model_logits = rgb_logits + flow_logits
   return tf.reduce_mean(
              tf.nn.sparse_softmax_cross_entropy_with_logits(
-                labels=labels, logits=logits))
+                labels=labels, logits=model_logits))
 
 def average_gradients(tower_grads):
   average_grads = []
@@ -70,7 +70,7 @@ def average_gradients(tower_grads):
 
 
 if __name__ == '__main__':
-  pipeline = InputPipeLine(NUM_FRAMES, BATCH_SIZE, FRAME_STRIDE)
+  pipeline = InputPipeLine('train_data.txt')
 
   tower_grads = []
   with tf.variable_scope(tf.get_variable_scope()):
@@ -121,7 +121,9 @@ if __name__ == '__main__':
         else:
           sess.run(train_op)
         it += 1
-    except KeyboardInterrupt:
+    except Exception as e:
       saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
+      coord.request_stop(e)
+      
     coord.request_stop()
     coord.join(threads)
