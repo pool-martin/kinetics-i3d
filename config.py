@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-FRAME_DATA_PATH = '/media/6TB/Videos/UCF-101-frames-mini'
+FRAME_DATA_PATH = '/media/6TB/Videos/UCF-101-frames'
 NUM_GPUS = 4
 CROP_SIZE = 224
 NUM_CLASSES = 101
@@ -22,5 +22,5 @@ CHECKPOINT_PATHS = {
 LR = 0.01 # can change it to exponentially decay with global steps
 TMPDIR = './tmp'
 
-DISPLAY_ITER = 10
+DISPLAY_ITER = 1
 SAVER_MAX_TO_KEEP = 10

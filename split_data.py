@@ -4,6 +4,8 @@ from config import FRAME_DATA_PATH
 import os
 import numpy as np
 from collections import defaultdict 
+from config import FRAME_DATA_PATH
+
 
 if __name__ == '__main__':
   all_videos = [os.path.join(FRAME_DATA_PATH, v) for v in os.listdir(FRAME_DATA_PATH)]

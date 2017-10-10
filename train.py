@@ -44,7 +44,7 @@ def restore():
   return rgb_saver, flow_saver
 
 
-def tower_loss(scope, rgb_inputs, flow_inputs, labels):
+def tower_loss(rgb_inputs, flow_inputs, labels):
   rgb_logits, flow_logits = inference(rgb_inputs, flow_inputs)
   model_logits = rgb_logits + flow_logits
   return tf.reduce_mean(
@@ -62,7 +62,7 @@ def average_gradients(tower_grads):
       grads.append(expanded_g)
 
     grads_concat = tf.concat(grads, axis=0)
-    grads_mean = tf.reduce_mean(grads_concat)
+    grads_mean = tf.reduce_mean(grads_concat, axis=0)
 
     v = grad_and_vars[0][1]
     average_grads.append((grads_mean, v))
@@ -71,21 +71,24 @@ def average_gradients(tower_grads):
 
 if __name__ == '__main__':
   pipeline = InputPipeLine('train_data.txt')
+  
+  opt = tf.train.GradientDescentOptimizer(LR)
 
   tower_grads = []
+  
   with tf.variable_scope(tf.get_variable_scope()):
-    for i in range(NUM_GPUS):
-      with tf.device('gpu/:%d' % i):
-        with tf.name_scope('tower_%d' % i) as scope:
-          rgbs, flows, labels = pipeline.get_batch()
-          loss = tower_loss(scope, rgbs, flows, labels)
+    for i in range(2):
+      with tf.name_scope('tower_%d' % i):
+        rgbs, flows, labels = pipeline.get_batch()
+        with tf.device('/gpu:%d' % i):
+          loss = tower_loss(rgbs, flows, labels)
           tf.get_variable_scope().reuse_variables()
           grads = opt.compute_gradients(loss)
           tower_grads.append(grads)
-
-  grads = average_grads(tower_grads)
+    
+  grads = average_gradients(tower_grads)
   train_op = opt.apply_gradients(grads)
-
+  rgb_saver, flow_saver = restore()
 
   # saver for fine tuning
   if not os.path.exists(TMPDIR):
@@ -95,7 +98,7 @@ if __name__ == '__main__':
   if not os.path.exists(ckpt_path):
     os.mkdir(ckpt_path)
 
-  with tf.Session() as sess:
+  with tf.Session(config=tf.ConfigProto(allow_soft_placement=False, log_device_placement=False)) as sess:
     sess.run(tf.global_variables_initializer())
 
     ckpt = tf.train.get_checkpoint_state(ckpt_path)
@@ -121,9 +124,10 @@ if __name__ == '__main__':
         else:
           sess.run(train_op)
         it += 1
-    except Exception as e:
+    except KeyboardInterrupt as e:
+      print 'iteration: ', it
       saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
-      coord.request_stop(e)
-      
+      coord.request_stop(e)  
+
     coord.request_stop()
     coord.join(threads)

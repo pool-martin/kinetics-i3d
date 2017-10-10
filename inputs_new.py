@@ -106,7 +106,7 @@ class InputPipeLine(object):
     if train:
       # random flip left-right
       rand_num = tf.random_uniform([])
-      flip_concat = tf.cond(tf.less(rand_num, 0.5), lambda: tf.reverse(rgb_flow_concat, axis=2), lambda: rgb_flow_concat)
+      flip_concat = tf.cond(tf.less(rand_num, 0.5), lambda: tf.reverse(rgb_flow_concat, axis=[2]), lambda: rgb_flow_concat)
       # random crop
       crop_concat = tf.random_crop(flip_concat, [int(self.num_frames), CROP_SIZE, CROP_SIZE, 5])
     else:
