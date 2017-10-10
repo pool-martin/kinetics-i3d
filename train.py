@@ -44,25 +44,48 @@ def restore():
   return rgb_saver, flow_saver
 
 
-def loss(logits, labels):
-  return tf.reduce_mean(
-          tf.nn.sparse_softmax_cross_entropy_with_logits(
-            labels=labels, logits=logits))
+def tower_loss(scope, rgb_inputs, flow_inputs, labels):
+  logits = inference(rgb_inputs, flow_inputs)
 
-def train(loss):
-  lr = LR
-  opt = tf.train.GradientDescentOptimizer(lr)
-  train_op = opt.minimize(loss)
-  return train_op
+  return tf.reduce_mean(
+             tf.nn.sparse_softmax_cross_entropy_with_logits(
+                labels=labels, logits=logits))
+
+def average_gradients(tower_grads):
+  average_grads = []
+  for grad_and_vars in zip(*tower_grads):
+    # Note that each grad_and_vars looks like the following:
+    # ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
+    grads = []
+    for g, _ in grad_and_vars:
+      expanded_g = tf.expand_dims(g, 0)
+      grads.append(expanded_g)
+
+    grads_concat = tf.concat(grads, axis=0)
+    grads_mean = tf.reduce_mean(grads_concat)
+
+    v = grad_and_vars[0][1]
+    average_grads.append((grads_mean, v))
+  return average_grads
+
 
 if __name__ == '__main__':
   pipeline = InputPipeLine(NUM_FRAMES, BATCH_SIZE, FRAME_STRIDE)
 
-  rgbs, flows, labels = pipeline.get_batch()
-  rgb_logits, flow_logits = inference(rgbs, flows)
-  rgb_saver, flow_saver = restore()
-  total_loss = loss(rgb_logits + flow_logits, labels)
-  train_op = train(total_loss)
+  tower_grads = []
+  with tf.variable_scope(tf.get_variable_scope()):
+    for i in range(NUM_GPUS):
+      with tf.device('gpu/:%d' % i):
+        with tf.name_scope('tower_%d' % i) as scope:
+          rgbs, flows, labels = pipeline.get_batch()
+          loss = tower_loss(scope, rgbs, flows, labels)
+          tf.get_variable_scope().reuse_variables()
+          grads = opt.compute_gradients(loss)
+          tower_grads.append(grads)
+
+  grads = average_grads(tower_grads)
+  train_op = opt.apply_gradients(grads)
+
 
   # saver for fine tuning
   if not os.path.exists(TMPDIR):
@@ -87,15 +110,18 @@ if __name__ == '__main__':
 
     coord, threads = pipeline.start(sess)
 
-    it = 0
-    while it < MAX_ITER and not coord.should_stop():
-      if it % DISPLAY_ITER == 0:
-        _, loss_val = sess.run([train_op, total_loss])
-        print 'step %d, loss = %.3f' % (it, loss_val)
-        # if it > 0:
-        # saver.save(sess, ckpt_path + '/model_ckpt', it)
-      else:
-        sess.run(train_op)
-      it += 1
+    try:
+      it = 0
+      while it < MAX_ITER and not coord.should_stop():
+        if it % DISPLAY_ITER == 0:
+          _, loss_val = sess.run([train_op, loss])
+          print 'step %d, loss = %.3f' % (it, loss_val)
+          # if it > 0:
+          # saver.save(sess, ckpt_path + '/model_ckpt', it)
+        else:
+          sess.run(train_op)
+        it += 1
+    except KeyboardInterrupt:
+      saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
     coord.request_stop()
     coord.join(threads)

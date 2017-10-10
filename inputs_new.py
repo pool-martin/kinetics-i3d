@@ -82,9 +82,13 @@ class InputPipeLine(object):
     tmp_flow_y = tf.stack(flow_y_frames, axis=0)
     output_flow = tf.concat([tmp_flow_x, tmp_flow_y], axis=3)
 
-    # random crop
+    # random flip left-right
     rgb_flow_concat = tf.concat([output_rgb, output_flow], axis=3)
-    crop_concat = tf.random_crop(rgb_flow_concat, [int(self.num_frames), CROP_SIZE, CROP_SIZE, 5])
+    rand_num = tf.random_uniform([])
+    flip_concat = tf.cond(tf.less(rand_num, 0.5), lambda: tf.reverse(rgb_flow_concat, axis=2), lambda: rgb_flow_concat)
+    
+    # random crop
+    crop_concat = tf.random_crop(flip_concat, [int(self.num_frames), CROP_SIZE, CROP_SIZE, 5])
     output_rgb = crop_concat[:,:,:,:3]
     output_flow = crop_concat[:,:,:,3:]
 
