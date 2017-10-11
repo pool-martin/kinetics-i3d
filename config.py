@@ -22,5 +22,8 @@ CHECKPOINT_PATHS = {
 LR = 0.01 # can change it to exponentially decay with global steps
 TMPDIR = './tmp'
 
+TRAIN_DATA = 'train_data.txt'
+VAL_DATA = 'val_data.txt'
+
 DISPLAY_ITER = 1
 SAVER_MAX_TO_KEEP = 10

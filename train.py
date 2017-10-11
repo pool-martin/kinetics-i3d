@@ -5,6 +5,7 @@ import os
 import numpy as np
 import tensorflow as tf
 from inputs_new import *
+from evaluate import evaluate
 
 import i3d
 from config import *
@@ -70,7 +71,7 @@ def average_gradients(tower_grads):
 
 
 if __name__ == '__main__':
-  pipeline = InputPipeLine('train_data.txt')
+  pipeline = InputPipeLine(TRAIN_DATA)
   
   opt = tf.train.GradientDescentOptimizer(LR)
 
@@ -120,14 +121,14 @@ if __name__ == '__main__':
           _, loss_val = sess.run([train_op, loss])
           print 'step %d, loss = %.3f' % (it, loss_val)
           # if it > 0:
-          # saver.save(sess, ckpt_path + '/model_ckpt', it)
+          #   saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
+          #   evaluate(VAL_DATA, ckpt_path)
         else:
           sess.run(train_op)
         it += 1
-    except KeyboardInterrupt as e:
-      print 'iteration: ', it
+    except (KeyboardInterrupt, tf.errors.OutOfRangeError) as e:
       saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
-      coord.request_stop(e)  
+      coord.request_stop(e)
 
     coord.request_stop()
     coord.join(threads)

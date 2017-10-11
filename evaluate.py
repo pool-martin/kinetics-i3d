@@ -25,6 +25,10 @@ def inference(rgb_inputs, flow_inputs):
 def evaluate(input_file, ckpt_dir):
   with tf.Graph().as_default() as g:
     pipeline = InputPipeLine(input_file, num_epochs=1)
+    rgbs, flows, labels = pipeline.get_batch(train=False)
+    rgb_logits, flow_logits = inference(rgbs, flows)
+    model_logits = rgb_logits + flow_logits
+    top_k_op = tf.nn.in_top_k(model_logits, labels, 1)
 
     with tf.Session() as sess:
       sess.run(tf.global_variables_initializer())
@@ -36,11 +40,9 @@ def evaluate(input_file, ckpt_dir):
       else:
         print 'error restoring ckpt...'
         return
+      
       coord, threads = pipeline.start(sess)
-      rgbs, flows, labels = pipeline.get_batch(train=False)
-      rgb_logits, flow_logits = inference(rgbs, flows)
-      model_logits = rgb_logits + flow_logits
-      top_k_op = tf.nn.in_top_k(model_logits, labels, 1)
+      
       true_count = 0
       try: 
         while not coord.should_stop():
