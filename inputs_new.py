@@ -3,7 +3,6 @@ import numpy as np
 import os
 import threading
 from config import *
-# import train code here
 
 class InputPipeLine(object):
   def __init__(self, input_file_name, num_epochs=None):
@@ -11,19 +10,13 @@ class InputPipeLine(object):
     self.batch_size = BATCH_SIZE
     self.stride = FRAME_STRIDE
     self.num_epochs = num_epochs
-    self.cls_dict = {}
+    self._build_cls_dict()
 
     self.videos = []
     with open(input_file_name, 'r') as f:
       for path in f.readlines():
         self.videos.append(path.strip())
-    # folders = np.sort([f for f in os.listdir(FRAME_DATA_PATH) if f.startswith('v')])
-    l = 0
-    for v in self.videos:
-      cls_name = v.split('_')[1]
-      if not cls_name in self.cls_dict:
-        self.cls_dict[cls_name] = l
-        l += 1
+
     # placeholders
     self.rgb = tf.placeholder(tf.string, shape=[self.num_frames])
     self.flow_x = tf.placeholder(tf.string, shape=[self.num_frames])
@@ -32,6 +25,13 @@ class InputPipeLine(object):
 
     self.queue = tf.FIFOQueue(capacity=QUEUE_CAPACITY, dtypes=[tf.string, tf.string, tf.string, tf.int32], shapes=[[self.num_frames],[self.num_frames],[self.num_frames],[]])
 
+  def _build_cls_dict(self):
+    self.cls_dict = {}
+    with open('ucfTrainTestlist/classInd.txt', 'r') as f:
+      for line in f.readlines():
+        line = line.strip()
+        ind, cls_name = line.split(' ')
+        self.cls_dict[cls_name] = int(ind) - 1
 
   def _enqueue(self, sess, enqueue_op):
     epoch = 0
@@ -125,17 +125,17 @@ class InputPipeLine(object):
     return rgbs, flows, labels
 
 
-if __name__ == '__main__':
-  with tf.Graph().as_default() as g:
-    pipeline = InputPipeLine(20, 10, 1) # (NUM_FRAMES, BATCH_SIZE, FRAME_STRIDE)
-    rgbs, flows, labels = pipeline.get_batch()
+# if __name__ == '__main__':
+#   with tf.Graph().as_default() as g:
+#     pipeline = InputPipeLine(INPUT_FILE)
+#     rgbs, flows, labels = pipeline.get_batch()
 
-    with tf.Session() as sess:
-      coord, threads = pipeline.start(sess) # start input pipeline with sess
+#     with tf.Session() as sess:
+#       coord, threads = pipeline.start(sess) # start input pipeline with sess
 
-      rgbs_res, flows_res = sess.run([rgbs, flows])
-      # print 'RGB', rgbs_res[0].min(), rgbs_res[0].max() 
-      # print 'flow', flows_res[0].min(), flows_res[0].max()
-      print rgbs_res.shape, flows_res.shape
-      coord.request_stop()
-      coord.join(threads)
+#       rgbs_res, flows_res = sess.run([rgbs, flows])
+#       # print 'RGB', rgbs_res[0].min(), rgbs_res[0].max() 
+#       # print 'flow', flows_res[0].min(), flows_res[0].max()
+#       print rgbs_res.shape, flows_res.shape
+#       coord.request_stop()
+#       coord.join(threads)
