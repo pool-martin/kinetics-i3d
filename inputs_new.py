@@ -6,6 +6,13 @@ from config import *
 
 class InputPipeLine(object):
   def __init__(self, input_file_name, num_epochs=None):
+    """
+    input_file_name: a text file listing all input file path (absolute path).
+    num_epochs: limits the number of epochs the pipeline will go over the inputs.
+      set num_epochs=None to unlimit the number of epochs
+      set num_epochs=i may result in a smaller number of examples in the last batch.
+    """
+
     self.num_frames = NUM_FRAMES
     self.batch_size = BATCH_SIZE
     self.stride = FRAME_STRIDE
@@ -82,6 +89,13 @@ class InputPipeLine(object):
     return coord, threads
 
   def get_batch(self, train=True):
+    """
+    set train=True to get a batch for training:
+      1. random flip left-right
+      2. random crop
+    set train=False to get a batch for evaluation(val/test):
+      1. central crop (according to the paper)
+    """
     item = self.queue.dequeue()
 
     rgb_frames = []
