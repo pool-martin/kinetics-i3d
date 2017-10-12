@@ -13,15 +13,14 @@ class InputPipeLine(object):
     self.num_epochs = num_epochs
     self.cls_dict = {}
 
-    folders = []
+    self.videos = []
     with open(input_file_name, 'r') as f:
       for path in f.readlines():
-        folders.append(path)
+        self.videos.append(path.strip())
     # folders = np.sort([f for f in os.listdir(FRAME_DATA_PATH) if f.startswith('v')])
-    self.num_inputs = len(folders)
     l = 0
-    for folder in folders:
-      cls_name = folder.split('_')[1]
+    for v in self.videos:
+      cls_name = v.split('_')[1]
       if not cls_name in self.cls_dict:
         self.cls_dict[cls_name] = l
         l += 1
@@ -35,11 +34,11 @@ class InputPipeLine(object):
 
 
   def _enqueue(self, sess, enqueue_op):
-    folders = [folder for folder in os.listdir(FRAME_DATA_PATH) if folder.startswith('v')]
     epoch = 0
+    videos = self.videos
     while True:
-      np.random.shuffle(folders) # random shuffle every epoch
-      for video in folders:
+      np.random.shuffle(videos) # random shuffle every epoch
+      for video in videos:
         prefix = os.path.join(FRAME_DATA_PATH, video)
         cls_name = video.split('_')[1]
         sorted_list = np.sort(os.listdir(prefix))
@@ -69,7 +68,7 @@ class InputPipeLine(object):
         epoch += 1
         if epoch == self.num_epochs:
           break
-    self.queue.close()
+    sess.run(self.queue.close(cancel_pending_enqueues=True))
 
 
   def start(self, sess):
@@ -83,10 +82,7 @@ class InputPipeLine(object):
     return coord, threads
 
   def get_batch(self, train=True):
-    try:
-      item = self.queue.dequeue()
-    except tf.errors.OutOfRangeError as e:
-      raise e
+    item = self.queue.dequeue()
 
     rgb_frames = []
     flow_x_frames = []
@@ -101,7 +97,6 @@ class InputPipeLine(object):
     tmp_flow_y = tf.stack(flow_y_frames, axis=0)
     output_flow = tf.concat([tmp_flow_x, tmp_flow_y], axis=3)
 
-
     rgb_flow_concat = tf.concat([output_rgb, output_flow], axis=3)
     if train:
       # random flip left-right
@@ -111,9 +106,10 @@ class InputPipeLine(object):
       crop_concat = tf.random_crop(flip_concat, [int(self.num_frames), CROP_SIZE, CROP_SIZE, 5])
     else:
       # center crop
-      beginH = (rgb_flow_concat.get_shape()[1] - 224) / 2
-      beginW = (rgb_flow_concat.get_shape()[2] - 224) / 2
-      crop_concat = rgb_flow_concat[:,beginH:beginH+224, beginW:beginW+224, :]
+      beginH = (tf.shape(rgb_flow_concat)[1] - 224) / 2
+      beginW = (tf.shape(rgb_flow_concat)[2] - 224) / 2
+      crop_concat = tf.slice(rgb_flow_concat, [0, beginH, beginW, 0], [-1, CROP_SIZE, CROP_SIZE, -1])
+      # crop_concat = rgb_flow_concat[:,beginH:beginH+224, beginW:beginW+224, :]
 
     output_rgb = crop_concat[:,:,:,:3]
     output_flow = crop_concat[:,:,:,3:]
@@ -125,7 +121,7 @@ class InputPipeLine(object):
     output_flow = output_flow * 2 / 256.0 - 1
 
     label = tf.cast(item[3], tf.int32)
-    rgbs, flows, labels = tf.train.batch([output_rgb, output_flow, label], batch_size=self.batch_size)
+    rgbs, flows, labels = tf.train.batch([output_rgb, output_flow, label], batch_size=self.batch_size, allow_smaller_final_batch=True)
     return rgbs, flows, labels
 
 

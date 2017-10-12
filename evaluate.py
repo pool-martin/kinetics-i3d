@@ -44,7 +44,8 @@ def evaluate(input_file, ckpt_dir):
       coord, threads = pipeline.start(sess)
       
       true_count = 0
-      try: 
+      try:
+        i = 0 
         while not coord.should_stop():
           true_count += np.sum(sess.run(top_k_op))
       except tf.errors.OutOfRangeError as e:
@@ -53,7 +54,7 @@ def evaluate(input_file, ckpt_dir):
       coord.request_stop()
       coord.join(threads)
 
-      print 'eval accuracy: %.3f' % (true_count / pipeline.num_inputs)
+      print 'eval accuracy: %.3f' % (true_count / len(pipeline.videos))
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
