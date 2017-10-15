@@ -26,4 +26,6 @@ TRAIN_DATA = 'train_data.txt'
 VAL_DATA = 'val_data.txt'
 
 DISPLAY_ITER = 1
+SAVE_ITER = 1000
+VAL_ITER = 1000
 SAVER_MAX_TO_KEEP = 10
