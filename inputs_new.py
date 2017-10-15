@@ -32,19 +32,17 @@ class InputPipeLine(object):
 
     self.queue = tf.FIFOQueue(capacity=QUEUE_CAPACITY, dtypes=[tf.string, tf.string, tf.string, tf.int32], shapes=[[self.num_frames],[self.num_frames],[self.num_frames],[]])
 
-
   def _enqueue(self, sess, enqueue_op):
     epoch = 0
     videos = self.videos
     while True:
       np.random.shuffle(videos) # random shuffle every epoch
-      for video in videos:
-        prefix = os.path.join(FRAME_DATA_PATH, video)
+      for video_path in videos:
         cls_name = video.split('_')[1]
-        sorted_list = np.sort(os.listdir(prefix))
-        imgs = [os.path.join(prefix, img) for img in sorted_list if img.startswith('img')]
-        flow_xs = [os.path.join(prefix, flow) for flow in sorted_list if flow.startswith('flow_x')]
-        flow_ys = [os.path.join(prefix, flow) for flow in sorted_list if flow.startswith('flow_y')]
+        sorted_list = np.sort(os.listdir(video_path))
+        imgs = [os.path.join(video_path, img) for img in sorted_list if img.startswith('img')]
+        flow_xs = [os.path.join(video_path, flow) for flow in sorted_list if flow.startswith('flow_x')]
+        flow_ys = [os.path.join(video_path, flow) for flow in sorted_list if flow.startswith('flow_y')]
         assert len(imgs) == len(flow_xs)
         assert len(imgs) == len(flow_ys)
         if self.num_frames <= len(imgs):
