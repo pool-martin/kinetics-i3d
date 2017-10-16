@@ -38,7 +38,7 @@ class InputPipeLine(object):
       for line in f.readlines():
         line = line.strip()
         ind, cls_name = line.split(' ')
-        self.cls_dict[cls_name] = int(ind) - 1
+        self.cls_dict[cls_name.lower()] = int(ind) - 1
 
   def _enqueue(self, sess, enqueue_op):
     epoch = 0
@@ -46,7 +46,7 @@ class InputPipeLine(object):
     while True:
       np.random.shuffle(videos) # random shuffle every epoch
       for video_path in videos:
-        cls_name = video.split('_')[1]
+        cls_name = video_path.split('_')[1]
         sorted_list = np.sort(os.listdir(video_path))
         imgs = [os.path.join(video_path, img) for img in sorted_list if img.startswith('img')]
         flow_xs = [os.path.join(video_path, flow) for flow in sorted_list if flow.startswith('flow_x')]
@@ -69,7 +69,7 @@ class InputPipeLine(object):
         imgs_out = imgs[begin:begin + self.num_frames]
         flow_xs_out = flow_xs[begin:begin + self.num_frames]
         flow_ys_out = flow_ys[begin:begin + self.num_frames]
-        sess.run(enqueue_op, {self.rgb: imgs_out, self.flow_x: flow_xs_out, self.flow_y: flow_ys_out, self.label: self.cls_dict[cls_name]})
+        sess.run(enqueue_op, {self.rgb: imgs_out, self.flow_x: flow_xs_out, self.flow_y: flow_ys_out, self.label: self.cls_dict[cls_name.lower()]})
       if self.num_epochs is not None:
         epoch += 1
         if epoch == self.num_epochs:
