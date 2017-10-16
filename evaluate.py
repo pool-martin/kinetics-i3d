@@ -13,12 +13,12 @@ def inference(rgb_inputs, flow_inputs):
     rgb_model = i3d.InceptionI3d(
       NUM_CLASSES, spatial_squeeze=True, final_endpoint='Logits')
     rgb_logits, _ = rgb_model(
-      rgb_inputs, is_training=True, dropout_keep_prob=DROPOUT_KEEP_PROB)
+      rgb_inputs, is_training=True, dropout_keep_prob=1.0)
   with tf.variable_scope('Flow'):
     flow_model = i3d.InceptionI3d(
         NUM_CLASSES, spatial_squeeze=True, final_endpoint='Logits')
     flow_logits, _ = flow_model(
-        flow_inputs, is_training=True, dropout_keep_prob=DROPOUT_KEEP_PROB)
+        flow_inputs, is_training=True, dropout_keep_prob=1.0)
   return rgb_logits, flow_logits
 
 
