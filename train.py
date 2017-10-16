@@ -69,6 +69,19 @@ def average_gradients(tower_grads):
     average_grads.append((grads_mean, v))
   return average_grads
 
+def get_true_counts(tower_logits_labels):
+  true_count = 0
+  for logits, labels in tower_logits_labels:
+    true_count += tf.reduce_sum(
+                   tf.cast(
+                     tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1)),
+                     tf.float32
+                   )
+                 )
+  return true_count
+          
+
+
 if __name__ == '__main__':
   train_pipeline = InputPipeLine(TRAIN_DATA)
   val_pipeline = InputPipeLine(VAL_DATA)
@@ -79,22 +92,21 @@ if __name__ == '__main__':
 
   tower_grads = []
   tower_losses = []
-  tower_topk_counts = []
+  tower_logits_labels = []
   
   with tf.variable_scope(tf.get_variable_scope()):
-    for i in range(2):
+    for i in range(NUM_GPUS):
       with tf.name_scope('tower_%d' % i):
         rgbs, flows, labels = tf.cond(is_training, lambda: train_pipeline.get_batch(train=True), lambda: val_pipeline.get_batch(train=False)) 
         with tf.device('/gpu:%d' % i):
           loss, logits = tower_inference(rgbs, flows, labels)
-          topk_count = tf.reduce_sum(tf.cast(tf.nn.in_top_k(logits, labels, 1), tf.float32))
           tf.get_variable_scope().reuse_variables()
           grads = opt.compute_gradients(loss)
           tower_grads.append(grads)
           tower_losses.append(loss)
-          tower_topk_counts.append(topk_count)
+          tower_logits_labels.append((logits, labels))
   
-  true_count_op = tf.reduce_sum(tower_topk_counts)
+  true_count_op = get_true_counts(tower_logits_labels)
   avg_loss = tf.reduce_mean(tower_losses)
   grads = average_gradients(tower_grads)
   train_op = opt.apply_gradients(grads)
@@ -124,7 +136,7 @@ if __name__ == '__main__':
     train_coord, train_threads = train_pipeline.start(sess)
     val_coord, val_threads = val_pipeline.start(sess)
 
-    summary_writer = tf.summary.FileWriter(TMPDIR, sess.graph)
+    summary_writer = tf.summary.FileWriter(LOGDIR, sess.graph)
 
     try:
       it = 0
@@ -137,7 +149,7 @@ if __name__ == '__main__':
           ])
           summary_writer.add_summary(loss_summ, it)
         if it % SAVE_ITER == 0:
-          #   saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
+          saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
         if it % VAL_ITER == 0:
           true_count = 0
           for i in range(0, len(val_pipeline.videos), NUM_GPUS * BATCH_SIZE):
@@ -152,7 +164,7 @@ if __name__ == '__main__':
           sess.run(train_op, {is_training: True})
         it += 1
     except (KeyboardInterrupt, tf.errors.OutOfRangeError) as e:
-      saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
+      # saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
       train_coord.request_stop(e)
       val_coord.request_stop(e)
 
