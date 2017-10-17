@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
 FRAME_DATA_PATH = '/media/6TB/Videos/UCF-101-frames'
-NUM_GPUS = 4
+NUM_GPUS = 2
 CROP_SIZE = 224
 NUM_CLASSES = 101
-BATCH_SIZE = 4
+BATCH_SIZE = 2
 NUM_FRAMES = 64
 FRAME_STRIDE = NUM_FRAMES
 QUEUE_CAPACITY = 32
@@ -24,7 +24,7 @@ TMPDIR = './tmp'
 LOGDIR = './log'
 
 TRAIN_DATA = 'train_data.txt'
-VAL_DATA = 'val_data.txt'
+VAL_DATA = 'test_eval.txt'  # 'val_data.txt'
 
 DISPLAY_ITER = 1
 SAVE_ITER = 1000

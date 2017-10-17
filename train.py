@@ -96,27 +96,29 @@ if __name__ == '__main__':
   tower_logits_labels = []
 
   # prefetch train/val batch
-  train_prefetch_queue = tf.FIFOQueue(capacity=1,
+  train_prefetch_queue = tf.FIFOQueue(capacity=BATCH_SIZE,
                                 dtypes=[tf.float32, tf.float32, tf.int32], 
-                                shapes=[[BATCH_SIZE, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 3],
-                                        [BATCH_SIZE, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 2],
-                                        [BATCH_SIZE]])
-  val_prefetch_queue = tf.FIFOQueue(capacity=1,
+                                shapes=[[NUM_FRAMES, CROP_SIZE, CROP_SIZE, 3],
+                                        [NUM_FRAMES, CROP_SIZE, CROP_SIZE, 2],
+                                        []])
+  val_prefetch_queue = tf.FIFOQueue(capacity=BATCH_SIZE,
                               dtypes=[tf.float32, tf.float32, tf.int32], 
-                              shapes=[[BATCH_SIZE, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 3],
-                                      [BATCH_SIZE, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 2],
-                                      [BATCH_SIZE]])
+                              shapes=[[NUM_FRAMES, CROP_SIZE, CROP_SIZE, 3],
+                                      [NUM_FRAMES, CROP_SIZE, CROP_SIZE, 2],
+                                      []])
   train_batch = train_pipeline.get_batch(train=True)
   val_batch = val_pipeline.get_batch(train=False)
-  train_enq = train_prefetch_queue.enqueue(train_batch)
+  train_enq = train_prefetch_queue.enqueue_many(train_batch)
   tf.train.add_queue_runner(tf.train.QueueRunner(train_prefetch_queue, [train_enq]))
-  val_enq = val_prefetch_queue.enqueue(val_batch)
+  val_enq = val_prefetch_queue.enqueue_many(val_batch)
   tf.train.add_queue_runner(tf.train.QueueRunner(val_prefetch_queue, [val_enq]))
   
   with tf.variable_scope(tf.get_variable_scope()):
     for i in range(NUM_GPUS):
       with tf.name_scope('tower_%d' % i):
-        rgbs, flows, labels = tf.cond(is_training, lambda: train_prefetch_queue.dequeue(), lambda: val_prefetch_queue.dequeue())
+        rgbs, flows, labels = tf.cond(is_training, lambda: train_prefetch_queue.dequeue_up_to(BATCH_SIZE), lambda: val_prefetch_queue.dequeue_up_to(BATCH_SIZE))
+        rgbs = tf.reshape(rgbs, [-1, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 3])
+        flows = tf.reshape(flows, [-1, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 2])
         with tf.device('/gpu:%d' % i):
           loss, logits = tower_inference(rgbs, flows, labels)
           tf.get_variable_scope().reuse_variables()
