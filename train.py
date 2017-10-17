@@ -4,6 +4,8 @@ import os
 
 import numpy as np
 import tensorflow as tf
+import time
+
 from inputs_new import *
 from evaluate import evaluate
 
@@ -81,7 +83,6 @@ def get_true_counts(tower_logits_labels):
   return true_count
           
 
-
 if __name__ == '__main__':
   train_pipeline = InputPipeLine(TRAIN_DATA)
   val_pipeline = InputPipeLine(VAL_DATA)
@@ -93,11 +94,29 @@ if __name__ == '__main__':
   tower_grads = []
   tower_losses = []
   tower_logits_labels = []
+
+  # prefetch train/val batch
+  train_prefetch_queue = tf.FIFOQueue(capacity=1,
+                                dtypes=[tf.float32, tf.float32, tf.int32], 
+                                shapes=[[BATCH_SIZE, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 3],
+                                        [BATCH_SIZE, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 2],
+                                        [BATCH_SIZE]])
+  val_prefetch_queue = tf.FIFOQueue(capacity=1,
+                              dtypes=[tf.float32, tf.float32, tf.int32], 
+                              shapes=[[BATCH_SIZE, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 3],
+                                      [BATCH_SIZE, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 2],
+                                      [BATCH_SIZE]])
+  train_batch = train_pipeline.get_batch(train=True)
+  val_batch = val_pipeline.get_batch(train=False)
+  train_enq = train_prefetch_queue.enqueue(train_batch)
+  tf.train.add_queue_runner(tf.train.QueueRunner(train_prefetch_queue, [train_enq]))
+  val_enq = val_prefetch_queue.enqueue(val_batch)
+  tf.train.add_queue_runner(tf.train.QueueRunner(val_prefetch_queue, [val_enq]))
   
   with tf.variable_scope(tf.get_variable_scope()):
     for i in range(NUM_GPUS):
       with tf.name_scope('tower_%d' % i):
-        rgbs, flows, labels = tf.cond(is_training, lambda: train_pipeline.get_batch(train=True), lambda: val_pipeline.get_batch(train=False)) 
+        rgbs, flows, labels = tf.cond(is_training, lambda: train_prefetch_queue.dequeue(), lambda: val_prefetch_queue.dequeue())
         with tf.device('/gpu:%d' % i):
           loss, logits = tower_inference(rgbs, flows, labels)
           tf.get_variable_scope().reuse_variables()
@@ -107,7 +126,8 @@ if __name__ == '__main__':
           tower_logits_labels.append((logits, labels))
   
   true_count_op = get_true_counts(tower_logits_labels)
-  avg_loss = tf.reduce_mean(tower_losses)
+  total_loss = tf.reduce_sum(tower_losses)
+  avg_loss = total_loss / (NUM_GPUS * BATCH_SIZE)
   grads = average_gradients(tower_grads)
   train_op = opt.apply_gradients(grads)
   rgb_saver, flow_saver = restore()
@@ -125,50 +145,82 @@ if __name__ == '__main__':
 
     ckpt = tf.train.get_checkpoint_state(ckpt_path)
     if ckpt and ckpt.model_checkpoint_path:
-      print 'Restoring from:', ckpt.model_checkpoint_path
+      tf.logging.info('Restoring from: %s', ckpt.model_checkpoint_path)
       saver.restore(sess, ckpt.all_model_checkpoint_paths[-1])
     else:
-      print 'No checkpoint file found, restoring pretrained weights...'
+      tf.logging.info('No checkpoint file found, restoring pretrained weights...')
       rgb_saver.restore(sess, CHECKPOINT_PATHS['rgb_imagenet'])
       flow_saver.restore(sess, CHECKPOINT_PATHS['flow_imagenet'])
-      print 'Restore Complete.'
+      tf.logging.info('Restore Complete.')
 
-    train_coord, train_threads = train_pipeline.start(sess)
-    val_coord, val_threads = val_pipeline.start(sess)
+    coord = tf.train.Coordinator()
+
+    train_threads = train_pipeline.start(sess, coord)
+    val_threads = val_pipeline.start(sess, coord)
+    prefetch_threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
     summary_writer = tf.summary.FileWriter(LOGDIR, sess.graph)
 
     try:
       it = 0
-      while it < MAX_ITER and not train_coord.should_stop() and not val_coord.should_stop():
+      last_time = time.time()
+      last_step = 0
+      while it < MAX_ITER and not coord.should_stop():
         if it % DISPLAY_ITER == 0:
           _, loss_val = sess.run([train_op, avg_loss], {is_training: True})
-          print 'step %d, loss = %.3f' % (it, loss_val)
+          tf.logging.info('step %d, loss = %.3f', it, loss_val)
           loss_summ = tf.Summary(value=[
             tf.Summary.Value(tag="train_loss", simple_value=loss_val)
           ])
           summary_writer.add_summary(loss_summ, it)
+
         if it % SAVE_ITER == 0:
           saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
+
         if it % VAL_ITER == 0:
+          tf.logging.info('validating...')
           true_count = 0
+          val_loss = 0
           for i in range(0, len(val_pipeline.videos), NUM_GPUS * BATCH_SIZE):
-            true_count += sess.run(true_count_op, {is_training: False})
+            c, l = sess.run([true_count_op, total_loss], {is_training: False})
+            true_count += c
+            val_loss += l
+          # add val accuracy to summary
           acc = true_count / len(val_pipeline.videos)
-          print 'val accuracy: %.3f' % acc
+          tf.logging.info('val accuracy: %.3f', acc)
           acc_summ = tf.Summary(value=[
             tf.Summary.Value(tag="val_acc", simple_value=acc)
           ])
           summary_writer.add_summary(acc_summ, it)
-        else:
-          sess.run(train_op, {is_training: True})
+          # add val loss to summary
+          val_loss = val_loss / len(val_pipeline.videos)
+          tf.logging.info('val loss: %.3f', val_loss)
+          val_loss_summ = tf.Summary(value=[
+            tf.Summary.Value(tag="val_loss", simple_value=val_loss)
+          ])
+          summary_writer.add_summary(val_loss_summ, it)
+
+        if it % THROUGH_PUT_ITER == 0:
+          duration = time.time() - last_time
+          last_time = time.time()
+          steps = it - last_step
+          last_step = it
+          through_put = int(steps * NUM_GPUS * BAT / duration)
+          tf.logging.info('num examples/sec: %d', through_put)
+          through_put_summ = tf.Summary(value=[
+            tf.Summary.Value(tag="through_put", simple_value=through_put)
+          ])
+          summary_writer.add_summary(through_put_summ, it)
+
         it += 1
     except (KeyboardInterrupt, tf.errors.OutOfRangeError) as e:
       # saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
-      train_coord.request_stop(e)
-      val_coord.request_stop(e)
+      coord.request_stop(e)
 
-    train_coord.request_stop()
-    train_coord.join(train_threads)
-    val_coord.request_stop()
-    val_coord.join(val_threads)
+    summary_writer.close()
+    
+    coord.request_stop()
+    threads = [train_threads, val_threads, prefetch_threads]
+    coord.join([t for tg in threads for t in tg])
+
+

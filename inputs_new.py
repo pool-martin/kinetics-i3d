@@ -77,15 +77,14 @@ class InputPipeLine(object):
     sess.run(self.queue.close(cancel_pending_enqueues=True))
 
 
-  def start(self, sess):
+  def start(self, sess, coord):
     enqueue_op = self.queue.enqueue([self.rgb, self.flow_x, self.flow_y, self.label])
     enqueue_thread = threading.Thread(target=self._enqueue, args=[sess, enqueue_op])
     enqueue_thread.daemon = True
     enqueue_thread.start()
     # start pipeline before start tf queue runners
-    coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    return coord, threads
+    return threads
 
   def get_batch(self, train=True):
     """
