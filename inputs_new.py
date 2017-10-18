@@ -136,6 +136,16 @@ class InputPipeLine(object):
     rgbs, flows, labels = tf.train.batch([output_rgb, output_flow, label], batch_size=self.batch_size, allow_smaller_final_batch=True)
     return rgbs, flows, labels
 
+  def prefetch_queue(self):
+    queue = tf.PaddingFIFOQueue(capacity=2,
+                                dtypes=[tf.float32, tf.float32, tf.int32], 
+                                shapes=[[None, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 3],
+                                        [None, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 2],
+                                        [None]])
+    batch_data = self.get_batch()
+    enq = queue.enqueue(batch_data)
+    tf.train.add_queue_runner(tf.train.QueueRunner(queue, [enq]))
+    return queue
 
 # if __name__ == '__main__':
 #   with tf.Graph().as_default() as g:

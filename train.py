@@ -95,23 +95,26 @@ if __name__ == '__main__':
   tower_losses = []
   tower_logits_labels = []
 
+  train_prefetch_queue = train_pipeline.prefetch_queue()
+  val_prefetch_queue = val_pipeline.prefetch_queue()
+
   # prefetch train/val batch
-  train_prefetch_queue = tf.PaddingFIFOQueue(capacity=2,
-                                dtypes=[tf.float32, tf.float32, tf.int32], 
-                                shapes=[[None, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 3],
-                                        [None, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 2],
-                                        [None]])
-  val_prefetch_queue = tf.PaddingFIFOQueue(capacity=2,
-                              dtypes=[tf.float32, tf.float32, tf.int32], 
-                              shapes=[[None, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 3],
-                                      [None, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 2],
-                                      [None]])
-  train_batch = train_pipeline.get_batch(train=True)
-  val_batch = val_pipeline.get_batch(train=False)
-  train_enq = train_prefetch_queue.enqueue(train_batch)
-  tf.train.add_queue_runner(tf.train.QueueRunner(train_prefetch_queue, [train_enq]))
-  val_enq = val_prefetch_queue.enqueue(val_batch)
-  tf.train.add_queue_runner(tf.train.QueueRunner(val_prefetch_queue, [val_enq]))
+  # train_prefetch_queue = tf.PaddingFIFOQueue(capacity=2,
+  #                               dtypes=[tf.float32, tf.float32, tf.int32], 
+  #                               shapes=[[None, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 3],
+  #                                       [None, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 2],
+  #                                       [None]])
+  # val_prefetch_queue = tf.PaddingFIFOQueue(capacity=2,
+  #                             dtypes=[tf.float32, tf.float32, tf.int32], 
+  #                             shapes=[[None, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 3],
+  #                                     [None, NUM_FRAMES, CROP_SIZE, CROP_SIZE, 2],
+  #                                     [None]])
+  # train_batch = train_pipeline.get_batch(train=True)
+  # val_batch = val_pipeline.get_batch(train=False)
+  # train_enq = train_prefetch_queue.enqueue(train_batch)
+  # tf.train.add_queue_runner(tf.train.QueueRunner(train_prefetch_queue, [train_enq]))
+  # val_enq = val_prefetch_queue.enqueue(val_batch)
+  # tf.train.add_queue_runner(tf.train.QueueRunner(val_prefetch_queue, [val_enq]))
   
   with tf.variable_scope(tf.get_variable_scope()):
     for i in range(NUM_GPUS):
@@ -158,7 +161,7 @@ if __name__ == '__main__':
 
     train_threads = train_pipeline.start(sess, coord)
     val_threads = val_pipeline.start(sess, coord)
-    prefetch_threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+    # prefetch_threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
     summary_writer = tf.summary.FileWriter(LOGDIR, sess.graph)
     tf.logging.set_verbosity(tf.logging.INFO) 
@@ -222,7 +225,7 @@ if __name__ == '__main__':
     summary_writer.close()
     
     coord.request_stop()
-    threads = [train_threads, val_threads, prefetch_threads]
-    coord.join([t for tg in threads for t in tg])
+    threads = [train_threads, val_threads]
+    coord.join([t for tgrp in threads for t in tgrp])
 
 
