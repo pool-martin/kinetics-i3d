@@ -219,7 +219,7 @@ if __name__ == '__main__':
 
         it += 1
     except (KeyboardInterrupt, tf.errors.OutOfRangeError) as e:
-      # saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
+      saver.save(sess, os.path.join(ckpt_path, 'model_ckpt'), it)
       coord.request_stop(e)
 
     summary_writer.close()
