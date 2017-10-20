@@ -21,10 +21,6 @@ def inference(rgb_inputs, flow_inputs):
         flow_inputs, is_training=True, dropout_keep_prob=1.0)
   return rgb_logits, flow_logits
 
-
-def _build_cls_dict(self):
- 
-
 def evaluate(input_file, ckpt_dir, top_k=None):
   with tf.Graph().as_default() as g:
     pipeline = InputPipeLine(input_file, num_epochs=1)
@@ -58,15 +54,15 @@ def evaluate(input_file, ckpt_dir, top_k=None):
       
       try:
         if top_k:
-          vIdx = 0
           with open('out_prob.txt', 'w+') as f:
             while not coord.should_stop():
-              probs = sess.run(prob_op)
+              probs, cls_labels = sess.run([prob_op, labels])
               indices = np.argsort(probs)
               for i in range(indices.shape[0]):
-                f.write('test video: ' + pipeline.videos[vIdx] + '\n')
+                f.write('true class: ' + cls_dict[cls_labels[i]] + '\n')
                 for j in range(indices.shape[1]):
                   f.write(cls_dict[indices[i, j]] + '\t' + probs[i, j] + '\n')
+                vIdx += 1
                 f.write('\n\n')
         else:
           true_count = 0
@@ -84,5 +80,6 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument('input_file')
   parser.add_argument('--ckpt_dir', required=True)
+  parser.add_argument('--top_k')
   args = parser.parse_args()
-  evaluate(args.input_file, args.ckpt_dir)
+  evaluate(args.input_file, args.ckpt_dir, args.top_k)
