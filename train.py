@@ -76,7 +76,7 @@ def get_true_counts(tower_logits_labels):
   for logits, labels in tower_logits_labels:
     true_count += tf.reduce_sum(
                    tf.cast(
-                     tf.equal(tf.argmax(logits, 1, output_type=tf.int32), labels),
+                     tf.equal(tf.cast(tf.argmax(logits, 1), tf.int32), labels),
                      tf.int32
                    )
                  )
@@ -172,7 +172,7 @@ if __name__ == '__main__':
       last_step = 0
       val_time = 0
       while it < MAX_ITER and not coord.should_stop():
-          _, loss_val = sess.run([train_op, avg_loss], {is_training: True})
+        _, loss_val = sess.run([train_op, avg_loss], {is_training: True})
 
         if it % DISPLAY_ITER == 0:
           tf.logging.info('step %d, loss = %.3f', it, loss_val)
