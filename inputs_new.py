@@ -22,7 +22,9 @@ class InputPipeLine(object):
     self.videos = []
     with open(input_file_name, 'r') as f:
       for path in f.readlines():
-        self.videos.append(path.strip())
+        path = path.strip()
+        if path:
+          self.videos.append(path.strip())
 
     # placeholders
     self.rgb = tf.placeholder(tf.string, shape=[self.num_frames])

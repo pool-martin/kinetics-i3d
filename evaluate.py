@@ -21,14 +21,22 @@ def inference(rgb_inputs, flow_inputs):
         flow_inputs, is_training=True, dropout_keep_prob=1.0)
   return rgb_logits, flow_logits
 
-
-def evaluate(input_file, ckpt_dir):
+def evaluate(input_file, ckpt_dir, top_k=None):
   with tf.Graph().as_default() as g:
     pipeline = InputPipeLine(input_file, num_epochs=1)
     rgbs, flows, labels = pipeline.get_batch(train=False)
     rgb_logits, flow_logits = inference(rgbs, flows)
     model_logits = rgb_logits + flow_logits
     top_k_op = tf.nn.in_top_k(model_logits, labels, 1)
+
+    if top_k:
+      prob_op = tf.nn.softmax(model_logits)
+      cls_dict = {}
+      with open('ucfTrainTestlist/classInd.txt', 'r') as f:
+        for line in f.readlines():
+          line = line.strip()
+          ind, cls_name = line.split(' ')
+          cls_dict[int(ind) - 1] = cls_name.lower()
 
     saver = tf.train.Saver()
     with tf.Session() as sess:
@@ -45,11 +53,22 @@ def evaluate(input_file, ckpt_dir):
       coord = tf.train.Coordinator()
       threads = pipeline.start(sess, coord)
 
-      true_count = 0
       try:
-        i = 0 
-        while not coord.should_stop():
-          true_count += np.sum(sess.run(top_k_op))
+        if top_k:
+          with open('out_prob.txt', 'w+') as f:
+            while not coord.should_stop():
+              probs, cls_labels = sess.run([prob_op, labels])
+              indices = np.argsort(probs)
+              for i in range(indices.shape[0]):
+                f.write('true class: ' + cls_dict[cls_labels[i]] + '\n')
+                for j in range(indices.shape[1]):
+                  f.write(cls_dict[indices[i, j]] + '\t' + probs[i, j] + '\n')
+                vIdx += 1
+                f.write('\n\n')
+        else:
+          true_count = 0
+          while not coord.should_stop():
+            true_count += np.sum(sess.run(top_k_op))
       except tf.errors.OutOfRangeError as e:
         coord.request_stop(e)
 
@@ -62,5 +81,6 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument('input_file')
   parser.add_argument('--ckpt_dir', required=True)
-  args = parser.parse_args()  
-  evaluate(args.input_file, args.ckpt_dir)
+  parser.add_argument('--top_k')
+  args = parser.parse_args()
+  evaluate(args.input_file, args.ckpt_dir, args.top_k)
