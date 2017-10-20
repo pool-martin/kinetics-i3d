@@ -28,7 +28,7 @@ def evaluate(input_file, ckpt_dir, top_k=None):
     rgb_logits, flow_logits = inference(rgbs, flows)
     model_logits = rgb_logits + flow_logits
     top_k_op = tf.nn.in_top_k(model_logits, labels, 1)
-    
+
     if top_k:
       prob_op = tf.nn.softmax(model_logits)
       cls_dict = {}
@@ -49,9 +49,10 @@ def evaluate(input_file, ckpt_dir, top_k=None):
       else:
         print 'error restoring ckpt...'
         return
-      
-      coord, threads = pipeline.start(sess)
-      
+
+      coord = tf.train.Coordinator()
+      threads = pipeline.start(sess, coord)
+
       try:
         if top_k:
           with open('out_prob.txt', 'w+') as f:
