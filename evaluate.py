@@ -29,7 +29,7 @@ def evaluate(input_file, ckpt_dir):
     rgb_logits, flow_logits = inference(rgbs, flows)
     model_logits = rgb_logits + flow_logits
     top_k_op = tf.nn.in_top_k(model_logits, labels, 1)
-    
+
     saver = tf.train.Saver()
     with tf.Session() as sess:
       sess.run(tf.global_variables_initializer())
@@ -41,9 +41,10 @@ def evaluate(input_file, ckpt_dir):
       else:
         print 'error restoring ckpt...'
         return
-      
-      coord, threads = pipeline.start(sess)
-      
+
+      coord = tf.train.Coordinator()
+      threads = pipeline.start(sess, coord)
+
       true_count = 0
       try:
         i = 0 
