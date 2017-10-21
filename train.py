@@ -199,7 +199,7 @@ if __name__ == '__main__':
             tf.Summary.Value(tag="val_acc", simple_value=acc)
           ])
           summary_writer.add_summary(acc_summ, it)
-          # a dd val loss to summary
+          # add val loss to summary
           val_loss = val_loss / int(len(val_pipeline.videos) / NUM_GPUS / BATCH_SIZE)
           tf.logging.info('val loss: %.3f', val_loss)
           val_loss_summ = tf.Summary(value=[
