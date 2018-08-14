@@ -1,0 +1,35 @@
+version: "3.2"
+
+services:
+  i3d-gpu:
+    container_name: jp-i3d
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    volumes:
+      - type: bind
+        source: ./Exp
+        target: /Exp
+      - type: bind
+        source: ./workspace
+        target: workspace
+      - type: bind
+        source: ./DL
+        target: /DL
+        read_only: true
+  i3d-cpu:
+    container_name: jp-i3d
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    volumes:
+      - type: bind
+        source: ./Exp
+        target: /Exp
+      - type: bind
+        source: ./workspace
+        target: workspace
+      - type: bind
+        source: ./DL
+        target: /DL
+        read_only: true
