@@ -12,7 +12,7 @@ services:
         target: /Exp
       - type: bind
         source: ./workspace
-        target: workspace
+        target: /workspace
       - type: bind
         source: ./DL
         target: /DL
@@ -28,7 +28,7 @@ services:
         target: /Exp
       - type: bind
         source: ./workspace
-        target: workspace
+        target: /workspace
       - type: bind
         source: ./DL
         target: /DL

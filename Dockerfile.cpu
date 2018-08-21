@@ -22,4 +22,4 @@
 RUN rm -rf /var/lib/apt/lists/*
 
 RUN pip install --upgrade pip
-RUN pip install -r ./requirements.txt
+RUN pip install pandas scikit-learn opencv-python matplotlib numpy dm-sonnet
